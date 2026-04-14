@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#C0392B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Reembolso">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="https://i.imgur.com/WtkBjp9.png">
+<link rel="manifest" href="data:application/json,{%22name%22:%22Servi%20Brasil%20Reembolso%22,%22short_name%22:%22Reembolso%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%23f0f2f5%22,%22theme_color%22:%22%23C0392B%22,%22icons%22:[{%22src%22:%22https://i.imgur.com/WtkBjp9.png%22,%22sizes%22:%22192x192%22,%22type%22:%22image/png%22}]}">
+<title>Servi Brasil - Reembolso</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;transition:background .2s,color .2s}
+input,select,textarea,button{font-family:inherit;-webkit-appearance:none;appearance:none}
+input::placeholder,textarea::placeholder{color:var(--text3)}
+input,select,textarea{color-scheme:light dark}
+.card{background:var(--bg);border:0.5px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px}
+.badge{font-size:11px;padding:3px 10px;border-radius:20px;display:inline-block;font-weight:500}
+body.light{
+  --bg:#fff;--bg2:#f0f2f5;--bg3:#e8eaed;--border:#e0dfd8;--border2:#ccccc4;
+  --text:#1a1a1a;--text2:#6b6b67;--text3:#9b9b97;
+  --primary:#C0392B;--primary-lt:#FADBD8;
+  --gbg:#E1F5EE;--gtx:#085041;--gbr:#5DCAA5;
+  --bbg:#E6F1FB;--btx:#0C447C;--bbr:#85B7EB;
+  --abg:#FFF7E6;--atx:#854F0B;--abr:#FAC775;
+  --rbg:#FCEBEB;--rtx:#A32D2D;--rbr:#F09595;
+  --obg:#FFF0E0;--otx:#7A3500;--obr:#FFAA60;
+  background:#f0f2f5;color:#1a1a1a;
+}
+body.dark{
+  --bg:#2a2a28;--bg2:#1a1a18;--bg3:#363634;--border:#4a4a48;--border2:#5e5e5c;
+  --text:#e8e8e4;--text2:#b0b0ac;--text3:#787874;
+  --primary:#E05040;--primary-lt:#3d1a18;
+  --gbg:#0d3d2a;--gtx:#5DCAA5;--gbr:#0F6E56;
+  --bbg:#0d2540;--btx:#85B7EB;--bbr:#185FA5;
+  --abg:#3d2e00;--atx:#FAC775;--abr:#854F0B;
+  --rbg:#3d0f0f;--rtx:#F09595;--rbr:#A32D2D;
+  --obg:#3d1f00;--otx:#FFAA60;--obr:#7A3500;
+  background:#1a1a18;color:#e8e8e4;
+}
+</style>
+</head>
+<body class="light">
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+const API="https://script.google.com/macros/s/AKfycbx82wj2PxLJAlRyKxYWHkDpGznhH_U84Pxc4HegtndMtmiAds3umPkV2bbNpOkJHZE0/exec";
+const LOGO="https://i.imgur.com/WtkBjp9.png";
+const KM=0.96;
+const CATS=["Alimentacao","Transporte","Hospedagem","Combustivel","Material de escritorio","Outro"];
+const SC={
+  "Pendente":{bg:"var(--abg)",tx:"var(--atx)",br:"var(--abr)"},
+  "Aprovado Rosimar":{bg:"var(--bbg)",tx:"var(--btx)",br:"var(--bbr)"},
+  "Aprovado Dario":{bg:"var(--gbg)",tx:"var(--gtx)",br:"var(--gbr)"},
+  "Rejeitado":{bg:"var(--rbg)",tx:"var(--rtx)",br:"var(--rbr)"},
+};
+const nNF=()=>({id:Date.now()+Math.random(),cat:"",data:"",val:"",km:"",desc:"",outro:"",anexos:[],mapaNome:"",mapa:""});
+const nForm=()=>({nome:"",dep:"",de:"",ate:"",pix:"",banco:"",desc:"",notas:[nNF()]});
+const fmtData=d=>{if(!d)return"";try{const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString("pt-BR",{timeZone:"UTC"});}catch{return d;}};
+const I=e=>({width:"100%",boxSizing:"border-box",padding:"11px 12px",fontSize:15,border:"1px solid "+(e?"#E24B4A":"var(--border2)"),borderRadius:10,background:"var(--bg)",color:"var(--text)",outline:"none"});
+const L={fontSize:13,color:"var(--text2)",marginBottom:5,display:"block",fontWeight:500};
+const G2={display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14};
+
+function processarArquivo(file,cb){
+  if(!file){cb(null,"");return;}
+  const nome=file.name||"anexo";
+  const isPDF=file.type==="application/pdf"||nome.toLowerCase().endsWith(".pdf");
+  const reader=new FileReader();
+  reader.onerror=()=>cb(null,"");
+  reader.onload=ev=>{
+    const result=ev.target.result;
+    if(!result||result.length<50){cb(null,"");return;}
+    if(isPDF){cb(result,nome);return;}
+    const img=new Image();
+    img.onerror=()=>cb(result,nome);
+    img.onload=()=>{
+      try{
+        const MAX=1200;let w=img.width,h=img.height;
+        if(w===0||h===0){cb(result,nome);return;}
+        if(w>MAX||h>MAX){if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;}}
+        const cv=document.createElement("canvas");cv.width=w;cv.height=h;
+        cv.getContext("2d").drawImage(img,0,0,w,h);
+        cb(cv.toDataURL("image/jpeg",0.78),nome);
+      }catch{cb(result,nome);}
+    };
+    img.src=result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function AnexoBtn({label,icon,onFile,accept,capture}){
+  const ref=useRef(null);
+  const [proc,setProc]=useState(false);
+  const handle=e=>{
+    const f=e.target.files&&e.target.files[0];
+    if(!f)return;
+    setProc(true);
+    processarArquivo(f,(b64,n)=>{
+      setProc(false);
+      if(b64)onFile(b64,n);
+      else alert("Nao foi possivel processar. Tente outro arquivo.");
+      if(ref.current)ref.current.value="";
+    });
+  };
+  return <label style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"10px 8px",cursor:"pointer",gap:3,background:"var(--bg)",flex:1}}>
+    <span style={{fontSize:20}}>{proc?"...":icon}</span>
+    <span style={{fontSize:11,color:"var(--text2)",textAlign:"center"}}>{proc?"Processando...":label}</span>
+    <input ref={ref} type="file" accept={accept} capture={capture} style={{display:"none"}} onChange={handle}/>
+  </label>;
+}
+
+function NFCard({nf,idx,onUpd,onRem,showRem}){
+  const isComb=nf.cat==="Combustivel";
+  const isOutro=nf.cat==="Outro";
+  const kmVal=isComb&&nf.km?((parseFloat(nf.km)||0)*KM).toFixed(2):"";
+  const upd=(c,v)=>onUpd(idx,c,v);
+  const adicionarAnexo=(b64,nome)=>{
+    const novosAnexos=[...(nf.anexos||[]),{id:Date.now(),b64:b64,nome:nome}];
+    upd("anexos",novosAnexos);
+  };
+  const removerAnexo=(ai)=>{
+    upd("anexos",(nf.anexos||[]).filter((_,i)=>i!==ai));
+  };
+  return <div style={{background:"var(--bg3)",borderRadius:12,padding:14,marginBottom:12,border:"0.5px solid var(--border)"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <span style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>NF {idx+1}</span>
+      {showRem&&<button onClick={onRem} style={{background:"none",border:"none",cursor:"pointer",fontSize:20,color:"var(--text3)",padding:0}}>x</button>}
+    </div>
+    <div style={{marginBottom:12}}>
+      <label style={L}>Categoria</label>
+      <select style={I(false)} value={nf.cat} onChange={e=>upd("cat",e.target.value)}>
+        <option value="">Selecione...</option>
+        {CATS.map(c=><option key={c}>{c}</option>)}
+      </select>
+    </div>
+    {nf.cat&&<>
+      {isOutro&&<div style={{marginBottom:12}}>
+        <label style={L}>Tipo de despesa</label>
+        <input style={I(false)} value={nf.outro} onChange={e=>upd("outro",e.target.value)} placeholder="Ex: Curso, Ferramenta..."/>
+      </div>}
+      {isComb&&<div style={{background:"var(--obg)",border:"1px solid var(--obr)",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"var(--otx)",fontWeight:500}}>
+        Informe os KM - valor calculado automaticamente (x R$ {KM.toFixed(2)}/km)
+      </div>}
+      <div style={{...G2,marginBottom:12}}>
+        <div><label style={L}>Data</label><input type="date" style={I(false)} value={nf.data} onChange={e=>upd("data",e.target.value)}/></div>
+        {isComb
+          ?<div><label style={L}>KM percorridos</label><input type="number" style={I(false)} value={nf.km} onChange={e=>upd("km",e.target.value)} placeholder="Ex: 120" min="0" step="0.1" inputMode="decimal"/></div>
+          :<div><label style={L}>Valor (R$)</label><input type="number" style={I(false)} value={nf.val} onChange={e=>upd("val",e.target.value)} placeholder="0,00" min="0" step="0.01" inputMode="decimal"/></div>
+        }
+      </div>
+      {isComb&&nf.km&&<div style={{fontSize:14,fontWeight:700,color:"var(--otx)",background:"var(--obg)",padding:"8px 12px",borderRadius:8,marginBottom:12}}>
+        {nf.km} km x R$ {KM.toFixed(2)} = R$ {kmVal}
+      </div>}
+      <div style={{marginBottom:12}}>
+        <label style={L}>Descricao</label>
+        <input style={I(false)} value={nf.desc} onChange={e=>upd("desc",e.target.value)} placeholder="Ex: Almoco com cliente"/>
+      </div>
+      <div style={{marginBottom:isComb?12:0}}>
+        <label style={L}>Anexos da NF ({(nf.anexos||[]).length} adicionado{(nf.anexos||[]).length!==1?"s":""})</label>
+        <div style={{border:"1px dashed var(--border2)",borderRadius:10,overflow:"hidden",display:"flex",marginBottom:6}}>
+          <AnexoBtn label="Camera" icon="📷" onFile={adicionarAnexo} accept="image/*" capture="environment"/>
+          <div style={{width:"1px",background:"var(--border2)"}}/>
+          <AnexoBtn label="Galeria/PDF" icon="🖼️" onFile={adicionarAnexo} accept="image/*,image/heic,image/heif,.pdf"/>
+        </div>
+        {(nf.anexos||[]).map((a,ai)=><div key={a.id} style={{padding:"6px 12px",fontSize:12,color:"var(--gtx)",background:"var(--gbg)",display:"flex",alignItems:"center",gap:6,borderRadius:8,marginBottom:4,border:"1px solid var(--gbr)"}}>
+          <span>OK</span>
+          <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.nome}</span>
+          <button onClick={()=>removerAnexo(ai)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--rtx)",fontSize:16,padding:0}}>x</button>
+        </div>)}
+      </div>
+      {isComb&&<div>
+        <label style={L}>Print do Google Maps (comprovante de rota)</label>
+        <div style={{border:"1px dashed var(--border2)",borderRadius:10,overflow:"hidden",display:"flex"}}>
+          <AnexoBtn label="Camera" icon="📷" onFile={(b,n)=>{upd("mapa",b);upd("mapaNome",n);}} accept="image/*" capture="environment"/>
+          <div style={{width:"1px",background:"var(--border2)"}}/>
+          <AnexoBtn label="Galeria" icon="🗺️" onFile={(b,n)=>{upd("mapa",b);upd("mapaNome",n);}} accept="image/*,image/heic,image/heif"/>
+        </div>
+        {nf.mapaNome&&<div style={{padding:"7px 12px",fontSize:12,color:"var(--gtx)",background:"var(--gbg)",display:"flex",alignItems:"center",gap:6,borderRadius:"0 0 10px 10px",border:"1px solid var(--gbr)",borderTop:"none"}}>
+          <span>OK</span><span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nf.mapaNome}</span>
+          <button onClick={()=>{upd("mapa","");upd("mapaNome","");}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--rtx)",fontSize:16,padding:0}}>x</button>
+        </div>}
+      </div>}
+    </>}
+  </div>;
+}
+
+function Hdr({tela,onBack,perfil,onSair,dark,onDark}){
+  return <div style={{background:"var(--bg)",borderBottom:"0.5px solid var(--border)",padding:"10px 1rem",display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:56,position:"sticky",top:0,zIndex:10,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      {(tela==="form"||tela==="detalhe")&&<button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"var(--text2)",padding:"0 4px 0 0"}}>&#8592;</button>}
+      <img src={LOGO} alt="Logo" style={{height:28,objectFit:"contain"}} onError={e=>e.target.style.display="none"}/>
+    </div>
+    <div style={{display:"flex",alignItems:"center",gap:8}}>
+      <button onClick={onDark} style={{background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:20,padding:"5px 12px",cursor:"pointer",fontSize:14,color:"var(--text)"}}>{dark?"Dia":"Noite"}</button>
+      {perfil&&<>
+        <span className="badge" style={{background:"var(--primary-lt)",color:"var(--text)",border:"0.5px solid var(--primary)"}}>{perfil}</span>
+        <button onClick={onSair} style={{fontSize:12,background:"none",border:"1px solid var(--border2)",borderRadius:7,padding:"5px 10px",cursor:"pointer",color:"var(--text2)"}}>Sair</button>
+      </>}
+    </div>
+  </div>;
+}
+
+function Alerta({msg}){
+  if(!msg)return null;
+  const ok=msg.t==="ok";
+  return <div style={{fontSize:13,padding:"10px 14px",borderRadius:10,background:ok?"var(--gbg)":"var(--rbg)",color:ok?"var(--gtx)":"var(--rtx)",border:"0.5px solid "+(ok?"var(--gbr)":"var(--rbr)"),marginBottom:14}}>{msg.m}</div>;
+}
+
+function App(){
+  const [dark,setDark]=useState(()=>{try{const s=localStorage.getItem("theme");if(s)return s==="dark";}catch{}return window.matchMedia("(prefers-color-scheme:dark)").matches;});
+  const [tela,setTela]=useState("login");
+  const [usuario,setUsuario]=useState(null);
+  const [perfil,setPerfil]=useState(null);
+  const [emailL,setEmailL]=useState("");
+  const [senha,setSenha]=useState("");
+  const [novaSenha,setNovaSenha]=useState("");
+  const [confSenha,setConfSenha]=useState("");
+  const [showPwd,setShowPwd]=useState(false);
+  const [perfilTmp,setPerfilTmp]=useState(null);
+  const [sols,setSols]=useState([]);
+  const [form,setForm]=useState(nForm());
+  const [det,setDet]=useState(null);
+  const [coment,setComent]=useState("");
+  const [erros,setErros]=useState({});
+  const [load,setLoad]=useState(false);
+  const [msg,setMsg]=useState(null);
+
+  useEffect(()=>{document.body.className=dark?"dark":"light";try{localStorage.setItem("theme",dark?"dark":"light");}catch{};},[dark]);
+
+  const apiCall=async body=>{const r=await fetch(API,{method:"POST",body:JSON.stringify(body)});return r.json();};
+  const carregar=async em=>{try{const d=await apiCall({type:"listar",email:em||usuario});if(d.ok)setSols(d.solicitacoes||[]);}catch{}};
+
+  const login=async()=>{
+    if(!emailL.trim()||!senha.trim())return;
+    setLoad(true);setMsg(null);
+    try{
+      const d=await apiCall({type:"login",email:emailL.trim().toLowerCase(),senha:senha.trim()});
+      if(d.ok&&d.primeiroAcesso){setPerfilTmp(d.perfil);setTela("criarSenha");}
+      else if(d.ok&&d.perfil){const em=emailL.trim().toLowerCase();setUsuario(em);setPerfil(d.perfil);await carregar(em);setTela("lista");}
+      else setMsg({t:"err",m:d.erro||"E-mail ou senha incorretos."});
+    }catch{setMsg({t:"err",m:"Erro de conexao."});}
+    setLoad(false);
+  };
+
+  const criarSenha=async()=>{
+    if(!novaSenha.trim()||!confSenha.trim()){setMsg({t:"err",m:"Preencha os dois campos."});return;}
+    if(novaSenha.length<6){setMsg({t:"err",m:"Minimo 6 caracteres."});return;}
+    if(novaSenha!==confSenha){setMsg({t:"err",m:"As senhas nao coincidem."});return;}
+    setLoad(true);setMsg(null);
+    try{
+      const d=await apiCall({type:"criarSenha",email:emailL.trim().toLowerCase(),senha:novaSenha.trim()});
+      if(d.ok){const em=emailL.trim().toLowerCase();setUsuario(em);setPerfil(perfilTmp);await carregar(em);setTela("lista");}
+      else setMsg({t:"err",m:d.erro||"Erro ao criar senha."});
+    }catch{setMsg({t:"err",m:"Erro de conexao."});}
+    setLoad(false);
+  };
+
+  const updNota=(idx,c,v)=>setForm(f=>({...f,notas:f.notas.map((n,i)=>i===idx?{...n,[c]:v}:n)}));
+
+  const total=form.notas.reduce((s,n)=>{
+    if(n.cat==="Combustivel"&&n.km)return s+(parseFloat(n.km)||0)*KM;
+    return s+(parseFloat(n.val)||0);
+  },0);
+
+  const validar=()=>{
+    const e={};
+    if(!form.nome.trim())e.nome=true;
+    if(!form.dep.trim())e.dep=true;
+    if(!form.de)e.de=true;
+    if(!form.ate)e.ate=true;
+    if(!form.pix.trim())e.pix=true;
+    if(!form.banco.trim())e.banco=true;
+    if(!form.desc.trim())e.desc=true;
+    setErros(e);return Object.keys(e).length===0;
+  };
+
+  const enviar=async()=>{
+    if(!validar())return;
+    setLoad(true);setMsg(null);
+    try{
+      // 1. Envia solicitação SEM anexos primeiro
+      const notas=form.notas.map(n=>{
+        const obj={data:n.data,descricao:n.desc,cat:n.cat,mapa:"",nomeMapa:"",totalAnexos:(n.anexos||[]).length};
+        if(n.cat==="Combustivel"&&n.km){obj.valor=((parseFloat(n.km)||0)*KM).toFixed(2);obj.descricao=n.km+"km x R$"+KM+"/km"+(n.desc?" - "+n.desc:"");}
+        else if(n.cat==="Outro"&&n.outro){obj.valor=n.val;obj.descricao="["+n.outro+"]"+(n.desc?" - "+n.desc:"");}
+        else{obj.valor=n.val;}
+        return obj;
+      });
+      const cats=[...new Set(notas.map(n=>n.cat).filter(Boolean))].join(", ");
+      const d=await apiCall({type:"solicitacao",nome:form.nome,email:usuario,departamento:form.dep,periodoInicio:form.de,periodoFim:form.ate,chavePix:form.pix,banco:form.banco,descricao:form.desc,categoria:cats,notas:notas,valorTotal:total.toFixed(2)});
+      if(!d.ok){setMsg({t:"err",m:"Erro: "+d.erro});setLoad(false);return;}
+
+      const solId=d.id;
+
+      // 2. Envia cada anexo separadamente
+      for(let ni=0;ni<form.notas.length;ni++){
+        const nf=form.notas[ni];
+        const anx=nf.anexos||[];
+        for(let ai=0;ai<anx.length;ai++){
+          const nfId=solId+"-NF"+String(ni+1).padStart(2,"0");
+          await apiCall({
+            type:"salvarAnexo",
+            nfId:nfId,
+            solId:solId,
+            anexoIdx:ai+1,
+            b64:anx[ai].b64,
+            nome:anx[ai].nome
+          });
+        }
+        // Envia mapa separadamente se existir
+        if(nf.mapa){
+          const nfId=solId+"-NF"+String(ni+1).padStart(2,"0");
+          await apiCall({type:"salvarMapa",nfId:nfId,solId:solId,b64:nf.mapa,nome:nf.mapaNome});
+        }
+      }
+
+      setMsg({t:"ok",m:"Solicitacao enviada! ID: "+solId});
+      setForm(nForm());
+      await carregar();
+      setTela("lista");
+    }catch(err){setMsg({t:"err",m:"Erro: "+err.message});}
+    setLoad(false);
+  };
+
+  const aprovar=async(id,acao)=>{
+    setLoad(true);setMsg(null);
+    try{
+      const d=await apiCall({type:"aprovacao",id:id,acao:acao,perfil:perfil.toLowerCase(),aprovador:usuario,comentario:coment});
+      if(d.ok){setMsg({t:"ok",m:acao==="aprovar"?"Aprovado!":"Rejeitado."});setComent("");await carregar();setTela("lista");}
+    }catch{setMsg({t:"err",m:"Erro de conexao."});}
+    setLoad(false);
+  };
+
+  const goBack=()=>{setTela("lista");setDet(null);setErros({});setMsg(null);};
+  const goSair=()=>{setUsuario(null);setPerfil(null);setSenha("");setEmailL("");setTela("login");setMsg(null);};
+  const hdr={dark:dark,onDark:()=>setDark(v=>!v)};
+
+  if(tela==="login"||tela==="criarSenha") return <>
+    <Hdr tela="login" perfil={null} {...hdr}/>
+    <div style={{minHeight:"calc(100vh - 56px)",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--bg2)",padding:"1rem"}}>
+      <div style={{background:"var(--bg)",borderRadius:20,padding:"2rem",width:"100%",maxWidth:380,border:"1px solid var(--border)",boxShadow:"0 4px 32px rgba(0,0,0,0.1)"}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <img src={LOGO} alt="Logo" style={{height:44,objectFit:"contain",marginBottom:10}} onError={e=>e.target.style.display="none"}/>
+          <p style={{fontSize:13,color:"var(--text2)"}}>{tela==="criarSenha"?"Crie sua senha de acesso":"Sistema de Reembolso"}</p>
+        </div>
+        {tela==="login"&&<>
+          <label style={L}>E-mail</label>
+          <input style={{...I(false),marginBottom:14}} value={emailL} onChange={e=>setEmailL(e.target.value)} placeholder="seu@email.com" type="email" autoComplete="email"/>
+          <label style={L}>Senha</label>
+          <div style={{position:"relative",marginBottom:16}}>
+            <input style={{...I(false),paddingRight:44}} value={senha} onChange={e=>setSenha(e.target.value)} placeholder="......" type={showPwd?"text":"password"} onKeyDown={e=>e.key==="Enter"&&login()} autoComplete="current-password"/>
+            <button onClick={()=>setShowPwd(v=>!v)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:14,color:"var(--text2)"}}>{showPwd?"ocultar":"ver"}</button>
+          </div>
+          <Alerta msg={msg}/>
+          <button style={{width:"100%",padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}} onClick={login} disabled={load}>{load?"Entrando...":"Entrar"}</button>
+          <p style={{fontSize:11,color:"var(--text3)",marginTop:14,textAlign:"center"}}>No primeiro acesso voce criara sua senha</p>
+        </>}
+        {tela==="criarSenha"&&<>
+          <div style={{background:"var(--abg)",border:"1px solid var(--abr)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:"var(--atx)"}}>
+            Primeiro acesso! Crie uma senha com pelo menos 6 caracteres.
+          </div>
+          <label style={L}>Nova senha</label>
+          <input style={{...I(false),marginBottom:14}} value={novaSenha} onChange={e=>setNovaSenha(e.target.value)} placeholder="Minimo 6 caracteres" type="password" autoComplete="new-password"/>
+          <label style={L}>Confirmar senha</label>
+          <input style={{...I(false),marginBottom:16}} value={confSenha} onChange={e=>setConfSenha(e.target.value)} placeholder="Repita a senha" type="password" onKeyDown={e=>e.key==="Enter"&&criarSenha()} autoComplete="new-password"/>
+          <Alerta msg={msg}/>
+          <button style={{width:"100%",padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}} onClick={criarSenha} disabled={load}>{load?"Salvando...":"Criar senha e entrar"}</button>
+        </>}
+      </div>
+    </div>
+  </>;
+
+  return <div style={{background:"var(--bg2)",minHeight:"100vh"}}>
+    <Hdr tela={tela} onBack={goBack} perfil={perfil} onSair={goSair} {...hdr}/>
+    <div style={{maxWidth:580,margin:"0 auto",padding:"1rem 1rem 5rem"}}>
+      <Alerta msg={msg}/>
+
+      {tela==="lista"&&<>
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          {perfil==="Prestador"&&<button onClick={()=>{setTela("form");setMsg(null);}} style={{flex:1,padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}}>+ Nova solicitacao</button>}
+          <button onClick={()=>carregar()} style={{padding:"13px 18px",fontSize:16,border:"1px solid var(--border2)",borderRadius:10,background:"var(--bg)",cursor:"pointer",color:"var(--text2)"}}>{load?"...":"↻"}</button>
+        </div>
+        {perfil==="Rosimar"&&<div style={{background:"var(--primary-lt)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--text)",fontWeight:500}}>Solicitacoes pendentes aguardam sua aprovacao.</div>}
+        {perfil==="Dario"&&<div style={{background:"var(--primary-lt)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--text)",fontWeight:500}}>Solicitacoes aprovadas por Rosimar aguardam sua aprovacao final.</div>}
+        {sols.length===0&&<div style={{textAlign:"center",padding:"4rem 1rem",color:"var(--text2)"}}>
+          <div style={{fontSize:48,marginBottom:12}}>📋</div>
+          <p>Nenhuma solicitacao encontrada.</p>
+        </div>}
+        {sols.map((s,i)=>{
+          const sc=SC[s.Status]||SC["Pendente"];
+          return <div key={i} className="card" onClick={()=>{setDet(s);setTela("detalhe");setMsg(null);}} style={{cursor:"pointer"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <p style={{fontWeight:600,fontSize:15,color:"var(--text)"}}>{s.Nome_Colaborador}</p>
+                <p style={{fontSize:13,color:"var(--text2)",marginTop:3}}>{s.Departamento} - {s.Categoria}</p>
+                <p style={{fontSize:11,color:"var(--text3)",marginTop:3}}>{s.ID_Solicitacao}</p>
+              </div>
+              <div style={{textAlign:"right",marginLeft:12}}>
+                <p style={{fontWeight:700,fontSize:16,color:"var(--text)"}}>R$ {parseFloat(s.Valor_Total||0).toFixed(2)}</p>
+                <span className="badge" style={{background:sc.bg,color:sc.tx,border:"0.5px solid "+sc.br,marginTop:5}}>{s.Status}</span>
+              </div>
+            </div>
+          </div>;
+        })}
+      </>}
+
+      {tela==="form"&&<div style={{paddingTop:4}}>
+        <div className="card">
+          <p style={{fontWeight:600,fontSize:14,marginBottom:14,color:"var(--text)"}}>Dados gerais</p>
+          <div style={G2}>
+            <div><label style={L}>Nome *</label><input style={I(erros.nome)} value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} placeholder="Nome completo"/></div>
+            <div><label style={L}>E-mail</label><input style={{...I(false),background:"var(--bg3)",cursor:"not-allowed"}} value={usuario} readOnly/></div>
+          </div>
+          <div style={G2}>
+            <div><label style={L}>Departamento *</label><input style={I(erros.dep)} value={form.dep} onChange={e=>setForm(f=>({...f,dep:e.target.value}))}/></div>
+            <div><label style={L}>Periodo de *</label><input type="date" style={I(erros.de)} value={form.de} onChange={e=>setForm(f=>({...f,de:e.target.value}))}/></div>
+          </div>
+          <div style={G2}>
+            <div><label style={L}>Periodo ate *</label><input type="date" style={I(erros.ate)} value={form.ate} onChange={e=>setForm(f=>({...f,ate:e.target.value}))}/></div>
+            <div><label style={L}>Chave Pix *</label><input style={I(erros.pix)} value={form.pix} onChange={e=>setForm(f=>({...f,pix:e.target.value}))} placeholder="CPF, e-mail..."/></div>
+          </div>
+          <div style={{marginBottom:14}}><label style={L}>Banco *</label><input style={I(erros.banco)} value={form.banco} onChange={e=>setForm(f=>({...f,banco:e.target.value}))} placeholder="Ex: Nubank, Itau..."/></div>
+          <div><label style={L}>Descricao geral *</label><textarea style={{...I(erros.desc),resize:"vertical"}} value={form.desc} onChange={e=>setForm(f=>({...f,desc:e.target.value}))} rows={3} placeholder="Descreva o motivo do reembolso..."/></div>
+        </div>
+
+        <div className="card">
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <p style={{fontWeight:600,fontSize:14,color:"var(--text)"}}>Notas fiscais</p>
+            <button onClick={()=>setForm(f=>({...f,notas:[...f.notas,nNF()]}))} style={{fontSize:13,padding:"6px 14px",borderRadius:8,border:"1px solid var(--border2)",background:"var(--bg)",cursor:"pointer",color:"var(--text)",fontWeight:500}}>+ Adicionar NF</button>
+          </div>
+          {form.notas.map((nf,idx)=><NFCard key={nf.id} nf={nf} idx={idx} onUpd={updNota} onRem={()=>setForm(f=>({...f,notas:f.notas.filter((_,i)=>i!==idx)}))} showRem={form.notas.length>1}/>)}
+          <div style={{display:"flex",justifyContent:"space-between",padding:14,background:"var(--bg3)",borderRadius:10}}>
+            <span style={{color:"var(--text2)",fontWeight:500}}>Total</span>
+            <span style={{fontWeight:700,fontSize:20,color:"var(--primary)"}}>R$ {total.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {Object.keys(erros).length>0&&<p style={{fontSize:13,color:"var(--rtx)",marginBottom:12}}>Preencha todos os campos obrigatorios (*).</p>}
+        <button style={{width:"100%",padding:15,fontSize:16,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer",marginTop:4}} onClick={enviar} disabled={load}>{load?"Enviando...":"Enviar para aprovacao"}</button>
+      </div>}
+
+      {tela==="detalhe"&&det&&(()=>{
+        const sv=sols.find(x=>x.ID_Solicitacao===det.ID_Solicitacao)||det;
+        const sc=SC[sv.Status]||SC["Pendente"];
+        const pRosimar=perfil==="Rosimar"&&sv.Status==="Pendente";
+        const pDario=perfil==="Dario"&&sv.Status==="Aprovado Rosimar";
+        return <div style={{paddingTop:4}}>
+          <div className="card">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+              <div>
+                <p style={{fontWeight:700,fontSize:16,color:"var(--text)"}}>{sv.Nome_Colaborador}</p>
+                <p style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{sv.ID_Solicitacao}</p>
+              </div>
+              <span className="badge" style={{background:sc.bg,color:sc.tx,border:"0.5px solid "+sc.br}}>{sv.Status}</span>
+            </div>
+            {[["Departamento",sv.Departamento],["Periodo",fmtData(sv.Periodo_Inicio)+" - "+fmtData(sv.Periodo_Fim)],["Categorias",sv.Categoria],["Chave Pix",sv.Chave_Pix],["Banco",sv.Banco],["Descricao",sv.Descricao_Reembolso]].map(([k,v])=>v?
+              <div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"8px 0",borderBottom:"0.5px solid var(--border)"}}>
+                <span style={{color:"var(--text2)",fontWeight:500}}>{k}</span>
+                <span style={{maxWidth:"55%",textAlign:"right",color:"var(--text)"}}>{v}</span>
+              </div>:null
+            )}
+            <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 0"}}>
+              <span style={{fontWeight:600,color:"var(--text)"}}>Total</span>
+              <span style={{fontWeight:700,fontSize:20,color:"var(--primary)"}}>R$ {parseFloat(sv.Valor_Total||0).toFixed(2)}</span>
+            </div>
+          </div>
+
+          <p style={{fontWeight:600,fontSize:14,margin:"4px 0 10px",color:"var(--text)"}}>Notas fiscais</p>
+          {(sv.notas||[]).map((nf,i)=><div key={i} className="card">
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+              <span style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>NF {i+1}{nf.Categoria?" - "+nf.Categoria:""}</span>
+              <span style={{fontWeight:700,color:"var(--primary)"}}>R$ {parseFloat(nf.Valor_NF||0).toFixed(2)}</span>
+            </div>
+            <p style={{fontSize:12,color:"var(--text2)",marginBottom:8}}>{fmtData(nf.Data_NF)}{nf.Descricao_NF?" - "+nf.Descricao_NF:""}</p>
+            {nf.Anexo_NF&&nf.Anexo_NF.toString().startsWith("http")&&
+              <div style={{marginBottom:6}}>
+                {nf.Anexo_NF.toString().split(",").filter(l=>l.startsWith("http")).map((link,li)=>(
+                  <div key={li} style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:4}}>
+                    <a href={link.replace("export=download","export=view")} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,color:"var(--btx)",textDecoration:"none",fontWeight:500,padding:"7px 12px",border:"1px solid var(--bbr)",borderRadius:8,background:"var(--bbg)"}}>Ver anexo {li+1}</a>
+                    <a href={link.replace("export=view","export=download")} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,color:"var(--btx)",textDecoration:"none",fontWeight:500,padding:"7px 12px",border:"1px solid var(--bbr)",borderRadius:8,background:"var(--bbg)"}}>Baixar {li+1}</a>
+                  </div>
+                ))}
+              </div>
+            }
+            {nf.Mapa_NF&&nf.Mapa_NF.toString().startsWith("http")&&
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <a href={nf.Mapa_NF.replace("export=download","export=view")} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,color:"var(--otx)",textDecoration:"none",fontWeight:500,padding:"7px 12px",border:"1px solid var(--obr)",borderRadius:8,background:"var(--obg)"}}>Ver rota</a>
+                <a href={nf.Mapa_NF.replace("export=view","export=download")} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,color:"var(--otx)",textDecoration:"none",fontWeight:500,padding:"7px 12px",border:"1px solid var(--obr)",borderRadius:8,background:"var(--obg)"}}>Baixar rota</a>
+              </div>
+            }
+            {(!nf.Anexo_NF||nf.Anexo_NF==="")&&<p style={{fontSize:12,color:"var(--text3)",fontStyle:"italic"}}>Sem anexo</p>}
+          </div>)}
+
+          {sv.Comentario_Gestor&&<div className="card" style={{borderLeft:"3px solid var(--bbr)",borderRadius:"0 14px 14px 0"}}>
+            <p style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>Comentario de Rosimar</p>
+            <p style={{fontSize:13,marginTop:4,color:"var(--text)"}}>{sv.Comentario_Gestor}</p>
+          </div>}
+          {sv.Comentario_RH&&<div className="card" style={{borderLeft:"3px solid var(--gbr)",borderRadius:"0 14px 14px 0"}}>
+            <p style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>Comentario de Dario</p>
+            <p style={{fontSize:13,marginTop:4,color:"var(--text)"}}>{sv.Comentario_RH}</p>
+          </div>}
+
+          {(pRosimar||pDario)&&<div className="card" style={{borderTop:"3px solid var(--primary)",borderRadius:"0 0 14px 14px"}}>
+            <p style={{fontWeight:600,fontSize:15,marginBottom:12,color:"var(--text)"}}>{pRosimar?"Aprovacao de Rosimar":"Aprovacao final de Dario"}</p>
+            <textarea value={coment} onChange={e=>setComent(e.target.value)} placeholder="Comentario (opcional)..." rows={3} style={{...I(false),resize:"vertical",marginBottom:14}}/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <button onClick={()=>aprovar(sv.ID_Solicitacao,"rejeitar")} disabled={load} style={{padding:14,borderRadius:10,border:"1px solid var(--rbr)",background:"var(--rbg)",color:"var(--rtx)",cursor:"pointer",fontWeight:600,fontSize:15}}>Rejeitar</button>
+              <button onClick={()=>aprovar(sv.ID_Solicitacao,"aprovar")} disabled={load} style={{padding:14,borderRadius:10,border:"none",background:"var(--primary)",color:"#fff",cursor:"pointer",fontWeight:600,fontSize:15}}>{load?"...":"Aprovar"}</button>
+            </div>
+          </div>}
+        </div>;
+      })()}
+    </div>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
