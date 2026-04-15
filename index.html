@@ -186,13 +186,14 @@ function NFCard({nf,idx,onUpd,onRem,showRem}){
   </div>;
 }
 
-function Hdr({tela,onBack,perfil,onSair,dark,onDark}){
+function Hdr({tela,onBack,perfil,onSair,dark,onDark,onAjuda}){
   return <div style={{background:"var(--bg)",borderBottom:"0.5px solid var(--border)",padding:"10px 1rem",display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:56,position:"sticky",top:0,zIndex:10,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
     <div style={{display:"flex",alignItems:"center",gap:10}}>
       {(tela==="form"||tela==="detalhe")&&<button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"var(--text2)",padding:"0 4px 0 0"}}>&#8592;</button>}
       <img src={LOGO} alt="Logo" style={{height:28,objectFit:"contain"}} onError={e=>e.target.style.display="none"}/>
     </div>
     <div style={{display:"flex",alignItems:"center",gap:8}}>
+      <button onClick={onAjuda} style={{background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:20,padding:"5px 12px",cursor:"pointer",fontSize:14,color:"var(--text)"}}>❓</button>
       <button onClick={onDark} style={{background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:20,padding:"5px 12px",cursor:"pointer",fontSize:14,color:"var(--text)"}}>{dark?"Dia":"Noite"}</button>
       {perfil&&<>
         <span className="badge" style={{background:"var(--primary-lt)",color:"var(--text)",border:"0.5px solid var(--primary)"}}>{perfil}</span>
@@ -226,6 +227,7 @@ function App(){
   const [erros,setErros]=useState({});
   const [load,setLoad]=useState(false);
   const [msg,setMsg]=useState(null);
+  const [telaAnterior,setTelaAnterior]=useState("lista");
 
   useEffect(()=>{document.body.className=dark?"dark":"light";try{localStorage.setItem("theme",dark?"dark":"light");}catch{};},[dark]);
 
@@ -428,10 +430,11 @@ function App(){
 
   const goBack=()=>{setTela("lista");setDet(null);setErros({});setMsg(null);};
   const goSair=()=>{setUsuario(null);setPerfil(null);setSenha("");setEmailL("");setTela("login");setMsg(null);};
-  const hdr={dark,onDark:()=>setDark(v=>!v)};
+  const goAjuda=()=>{setTelaAnterior(tela);setTela("ajuda");setMsg(null);};
+  const hdr={dark,onDark:()=>setDark(v=>!v),onAjuda:goAjuda};
 
   if(tela==="login"||tela==="criarSenha") return <>
-    <Hdr tela="login" perfil={null} {...hdr}/>
+    <Hdr tela="login" perfil={null} {...hdr} onAjuda={()=>{}}/>
     <div style={{minHeight:"calc(100vh - 56px)",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--bg2)",padding:"1rem"}}>
       <div style={{background:"var(--bg)",borderRadius:20,padding:"2rem",width:"100%",maxWidth:380,border:"1px solid var(--border)",boxShadow:"0 4px 32px rgba(0,0,0,0.1)"}}>
         <div style={{textAlign:"center",marginBottom:24}}>
@@ -535,6 +538,69 @@ function App(){
           <button style={{padding:15,fontSize:15,fontWeight:600,border:"1.5px solid var(--border2)",borderRadius:10,background:"var(--bg)",color:"var(--text2)",cursor:"pointer"}} onClick={()=>salvarRascunho()} disabled={load}>{load?"Salvando...":"💾 Rascunho"}</button>
           <button style={{padding:15,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}} onClick={enviar} disabled={load}>{load?"Enviando...":"Enviar para aprovacao"}</button>
         </div>
+      </div>}
+
+      {tela==="ajuda"&&<div style={{paddingTop:4}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <span style={{fontWeight:700,fontSize:16,color:"var(--text)"}}>Manual de Uso</span>
+          <button onClick={()=>setTela(telaAnterior)} style={{fontSize:13,padding:"6px 14px",borderRadius:8,border:"1px solid var(--border2)",background:"var(--bg)",cursor:"pointer",color:"var(--text2)"}}>← Voltar</button>
+        </div>
+
+        <div className="card" style={{marginBottom:12}}>
+          <p style={{fontWeight:600,fontSize:14,marginBottom:10,color:"var(--text)"}}>🔗 Links importantes</p>
+          <a href="https://servireembolso.github.io/reembolso-servi/" target="_blank" style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"0.5px solid var(--border)",textDecoration:"none"}}>
+            <span style={{fontSize:13,color:"var(--text)"}}>🚀 Acessar o App</span>
+            <span style={{fontSize:12,color:"var(--btx)"}}>Abrir →</span>
+          </a>
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLSfKGuzFPSp65xq2JA4eyVshxbkfJt-B8OsEgwfmq-1g-6BiTQ/viewform" target="_blank" style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",textDecoration:"none"}}>
+            <span style={{fontSize:13,color:"var(--text)"}}>📝 Cadastrar Novo Prestador</span>
+            <span style={{fontSize:12,color:"var(--btx)"}}>Abrir →</span>
+          </a>
+        </div>
+
+        <div className="card" style={{marginBottom:12}}>
+          <p style={{fontWeight:600,fontSize:14,marginBottom:10,color:"var(--text)"}}>👥 Perfis de acesso</p>
+          {[
+            {icon:"👤",nome:"Prestador",desc:"Envia solicitacoes de reembolso com notas fiscais e acompanha o status."},
+            {icon:"✅",nome:"Financeiro",desc:"Faz a primeira aprovacao e recebe e-mail automatico a cada nova solicitacao."},
+            {icon:"🏆",nome:"Diretor Geral",desc:"Faz a aprovacao final. Rosimar recebe o PDF para efetuar o pagamento."},
+          ].map((p,i)=><div key={i} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:i<2?"0.5px solid var(--border)":"none"}}>
+            <span style={{fontSize:20}}>{p.icon}</span>
+            <div><p style={{fontWeight:600,fontSize:13,color:"var(--text)"}}>{p.nome}</p><p style={{fontSize:12,color:"var(--text2)"}}>{p.desc}</p></div>
+          </div>)}
+        </div>
+
+        <div className="card" style={{marginBottom:12}}>
+          <p style={{fontWeight:600,fontSize:14,marginBottom:10,color:"var(--text)"}}>📋 Como enviar um reembolso</p>
+          {[
+            {n:"1",t:"Clique em '+ Nova solicitacao'",d:"Preencha nome, departamento, periodo, banco e chave Pix."},
+            {n:"2",t:"Adicione as notas fiscais",d:"Selecione categoria, data, valor e anexe foto ou PDF de cada NF."},
+            {n:"3",t:"Salve ou envie",d:"Use Rascunho para salvar e continuar depois, ou Enviar para submeter agora."},
+            {n:"4",t:"Acompanhe o status",d:"Veja na lista: Rascunho, Pendente, Aprovado Financeiro, Aprovado Diretor Geral ou Rejeitado."},
+          ].map((s,i)=><div key={i} style={{display:"flex",gap:12,padding:"8px 0",borderBottom:i<3?"0.5px solid var(--border)":"none",alignItems:"flex-start"}}>
+            <span style={{background:"var(--primary-lt)",color:"var(--primary)",width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:12,flexShrink:0,marginTop:2}}>{s.n}</span>
+            <div><p style={{fontWeight:600,fontSize:13,color:"var(--text)"}}>{s.t}</p><p style={{fontSize:12,color:"var(--text2)"}}>{s.d}</p></div>
+          </div>)}
+        </div>
+
+        <div className="card" style={{marginBottom:12}}>
+          <p style={{fontWeight:600,fontSize:14,marginBottom:10,color:"var(--text)"}}>⛽ Regra Combustivel</p>
+          <p style={{fontSize:13,color:"var(--text2)"}}>Informe apenas os <strong style={{color:"var(--text)"}}>KM percorridos</strong>. O sistema calcula automaticamente: <strong style={{color:"var(--primary)"}}>KM x R$ 0,96</strong>. Anexe o print do Google Maps como comprovante.</p>
+        </div>
+
+        <div className="card" style={{marginBottom:12}}>
+          <p style={{fontWeight:600,fontSize:14,marginBottom:10,color:"var(--text)"}}>💡 Dicas importantes</p>
+          {[
+            {icon:"💾",t:"Use o Rascunho",d:"Salve e continue depois. So vai para aprovacao quando clicar em Enviar."},
+            {icon:"📎",t:"Multiplos anexos",d:"Adicione varias fotos na mesma NF. Ex: almoco, cafe e jantar em Alimentacao."},
+            {icon:"🗑️",t:"Cancelar solicitacao",d:"Voce pode excluir Rascunhos e Pendentes. Apos aprovacao do Financeiro nao e possivel cancelar."},
+            {icon:"📧",t:"Notificacoes",d:"Voce recebe e-mail automatico quando sua solicitacao for aprovada ou rejeitada."},
+          ].map((d,i)=><div key={i} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:i<3?"0.5px solid var(--border)":"none"}}>
+            <span style={{fontSize:18,flexShrink:0}}>{d.icon}</span>
+            <div><p style={{fontWeight:600,fontSize:13,color:"var(--text)"}}>{d.t}</p><p style={{fontSize:12,color:"var(--text2)"}}>{d.d}</p></div>
+          </div>)}
+        </div>
+
       </div>}
 
       {tela==="detalhe"&&det&&(()=>{
