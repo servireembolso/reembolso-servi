@@ -55,6 +55,7 @@ const LOGO="https://i.imgur.com/WtkBjp9.png";
 const KM=0.96;
 const CATS=["Alimentacao","Transporte","Hospedagem","Combustivel","Material de escritorio","Outro"];
 const SC={
+  "Rascunho":{bg:"var(--bg3)",tx:"var(--text2)",br:"var(--border2)"},
   "Pendente":{bg:"var(--abg)",tx:"var(--atx)",br:"var(--abr)"},
   "Aprovado Rosimar":{bg:"var(--bbg)",tx:"var(--btx)",br:"var(--bbr)"},
   "Aprovado Dario":{bg:"var(--gbg)",tx:"var(--gtx)",br:"var(--gbr)"},
@@ -295,6 +296,62 @@ function App(){
     setErros(e);return Object.keys(e).length===0;
   };
 
+  // SALVAR RASCUNHO (com anexos)
+  const salvarRascunho=async()=>{
+    if(!form.nome.trim()){setMsg({t:"err",m:"Preencha o nome para salvar rascunho."});return;}
+    setLoad(true);setMsg(null);
+    try{
+      const notas=form.notas.map(n=>{
+        let valor=n.val;
+        let descricao=n.desc;
+        if(n.cat==="Combustivel"&&n.km){
+          valor=((parseFloat(n.km)||0)*KM).toFixed(2);
+          descricao=n.km+"km x R$"+KM+"/km"+(n.desc?" - "+n.desc:"");
+        } else if(n.cat==="Outro"&&n.outro){
+          descricao="["+n.outro+"]"+(n.desc?" - "+n.desc:"");
+        }
+        return {
+          data:n.data,descricao,cat:n.cat,valor,km:n.km||"",
+          anexos:(n.anexos||[]).map(a=>({b64:a.b64,nome:a.nome})),
+          mapa:n.mapa||"",nomeMapa:n.mapaNome||""
+        };
+      });
+      const cats=[...new Set(notas.map(n=>n.cat).filter(Boolean))].join(", ");
+      const total=form.notas.reduce((s,n)=>{
+        if(n.cat==="Combustivel"&&n.km)return s+(parseFloat(n.km)||0)*KM;
+        return s+(parseFloat(n.val)||0);
+      },0);
+      const d=await apiCall({
+        type:"rascunho",nome:form.nome,email:usuario,
+        departamento:form.dep,periodoInicio:form.de,periodoFim:form.ate,
+        chavePix:form.pix,banco:form.banco,descricao:form.desc,
+        categoria:cats,notas,valorTotal:total.toFixed(2)
+      });
+      if(d.ok){
+        setMsg({t:"ok",m:"Rascunho salvo! ID: "+d.id});
+        setForm(nForm());
+        await carregar(usuario,perfil);
+        setTela("lista");
+      } else setMsg({t:"err",m:"Erro: "+(d.msg||"Tente novamente")});
+    }catch(err){setMsg({t:"err",m:"Erro: "+err.message});}
+    setLoad(false);
+  };
+
+  // EXCLUIR SOLICITACAO
+  const excluir=async(id)=>{
+    if(!window.confirm("Confirma a exclusao desta solicitacao?"))return;
+    setLoad(true);
+    try{
+      const d=await apiCall({type:"excluir",id,email:usuario});
+      if(d.ok){
+        setMsg({t:"ok",m:"Solicitacao excluida."});
+        await carregar(usuario,perfil);
+        setTela("lista");
+      } else setMsg({t:"err",m:d.msg||"Nao foi possivel excluir."});
+    }catch(err){setMsg({t:"err",m:"Erro: "+err.message});}
+    setLoad(false);
+  };
+
   // ENVIO UNIFICADO — anexos embutidos nas notas, uma unica chamada
   const enviar=async()=>{
     if(!validar())return;
@@ -323,20 +380,20 @@ function App(){
 
       const cats=[...new Set(notas.map(n=>n.cat).filter(Boolean))].join(", ");
 
-      const d=await apiCall({
-        type:"solicitacao",
-        nome:form.nome,
-        email:usuario,
-        departamento:form.dep,
-        periodoInicio:form.de,
-        periodoFim:form.ate,
-        chavePix:form.pix,
-        banco:form.banco,
-        descricao:form.desc,
-        categoria:cats,
-        notas:notas,
-        valorTotal:total.toFixed(2)
-      });
+      // Se e edicao de rascunho, primeiro atualiza depois envia
+      const isEdicao = !!form._editId;
+      const payload = {
+        type: isEdicao ? "solicitacao" : "solicitacao",
+        nome:form.nome, email:usuario, departamento:form.dep,
+        periodoInicio:form.de, periodoFim:form.ate,
+        chavePix:form.pix, banco:form.banco, descricao:form.desc,
+        categoria:cats, notas:notas, valorTotal:total.toFixed(2)
+      };
+      // Se editando rascunho existente, exclui e recria como nova solicitacao
+      if(isEdicao){
+        await apiCall({type:"excluir",id:form._editId,email:usuario});
+      }
+      const d=await apiCall(payload);
 
       if(d.ok){
         setMsg({t:"ok",m:"Solicitacao enviada! ID: "+d.id});
@@ -474,7 +531,10 @@ function App(){
         </div>
 
         {Object.keys(erros).length>0&&<p style={{fontSize:13,color:"var(--rtx)",marginBottom:12}}>Preencha todos os campos obrigatorios (*).</p>}
-        <button style={{width:"100%",padding:15,fontSize:16,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer",marginTop:4}} onClick={enviar} disabled={load}>{load?"Enviando... aguarde":"Enviar para aprovacao"}</button>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:4}}>
+          <button style={{padding:15,fontSize:15,fontWeight:600,border:"1.5px solid var(--border2)",borderRadius:10,background:"var(--bg)",color:"var(--text2)",cursor:"pointer"}} onClick={()=>salvarRascunho()} disabled={load}>{load?"Salvando...":"💾 Rascunho"}</button>
+          <button style={{padding:15,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}} onClick={enviar} disabled={load}>{load?"Enviando...":"Enviar para aprovacao"}</button>
+        </div>
       </div>}
 
       {tela==="detalhe"&&det&&(()=>{
@@ -528,6 +588,39 @@ function App(){
               </div>}
             </div>;
           })}
+
+          {perfil==="Prestador"&&(sv.Status==="Rascunho"||sv.Status==="Pendente")&&<div className="card">
+            <div style={{display:"grid",gridTemplateColumns:sv.Status==="Rascunho"?"1fr 1fr":"1fr",gap:12}}>
+              {sv.Status==="Rascunho"&&<button onClick={()=>{
+                setForm({
+                  nome:sv.Nome_Colaborador||"",dep:sv.Departamento||"",
+                  de:sv.Periodo_Inicio||"",ate:sv.Periodo_Fim||"",
+                  pix:sv.Chave_Pix||"",banco:sv.Banco||"",desc:sv.Descricao_Reembolso||"",
+                  notas:(sv.notas||[]).length>0?(sv.notas||[]).map(n=>({
+                    id:Date.now()+Math.random(),cat:n.Categoria||"",
+                    data:n.Data_NF||"",val:n.Valor_NF||"",km:n.km||"",
+                    desc:n.Descricao_NF||"",outro:"",anexos:[],mapaNome:"",mapa:""
+                  })):[nNF()],
+                  _editId:sv.ID_Solicitacao
+                });
+                setTela("form");setMsg(null);
+              }} style={{padding:13,borderRadius:10,border:"1px solid var(--bbr)",background:"var(--bbg)",color:"var(--btx)",cursor:"pointer",fontWeight:600,fontSize:14}}>✏️ Editar rascunho</button>}
+              <button onClick={()=>excluir(sv.ID_Solicitacao)} disabled={load} style={{padding:13,borderRadius:10,border:"1px solid var(--rbr)",background:"var(--rbg)",color:"var(--rtx)",cursor:"pointer",fontWeight:600,fontSize:14}}>🗑️ Excluir</button>
+            </div>
+          </div>}
+
+          {perfil==="Prestador"&&sv.Status==="Rascunho"&&<div className="card">
+            <button onClick={async()=>{
+              if(!window.confirm("Enviar esta solicitacao para aprovacao?"))return;
+              setLoad(true);
+              const d=await apiCall({type:"enviarRascunho",id:sv.ID_Solicitacao});
+              if(d.ok){setMsg({t:"ok",m:"Enviado para aprovacao!"});await carregar(usuario,perfil);setTela("lista");}
+              else setMsg({t:"err",m:d.msg||"Erro ao enviar."});
+              setLoad(false);
+            }} disabled={load} style={{width:"100%",padding:14,borderRadius:10,border:"none",background:"var(--primary)",color:"#fff",cursor:"pointer",fontWeight:600,fontSize:15}}>
+              🚀 Enviar para aprovacao
+            </button>
+          </div>}
 
           {sv.Comentario_Gestor&&<div className="card" style={{borderLeft:"3px solid var(--bbr)",borderRadius:"0 14px 14px 0"}}>
             <p style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>Comentario de Rosimar</p>
