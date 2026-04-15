@@ -57,8 +57,8 @@ const CATS=["Alimentacao","Transporte","Hospedagem","Combustivel","Material de e
 const SC={
   "Rascunho":{bg:"var(--bg3)",tx:"var(--text2)",br:"var(--border2)"},
   "Pendente":{bg:"var(--abg)",tx:"var(--atx)",br:"var(--abr)"},
-  "Aprovado Rosimar":{bg:"var(--bbg)",tx:"var(--btx)",br:"var(--bbr)"},
-  "Aprovado Dario":{bg:"var(--gbg)",tx:"var(--gtx)",br:"var(--gbr)"},
+  "Aprovado Financeiro":{bg:"var(--bbg)",tx:"var(--btx)",br:"var(--bbr)"},
+  "Aprovado Diretor Geral":{bg:"var(--gbg)",tx:"var(--gtx)",br:"var(--gbr)"},
   "Rejeitado":{bg:"var(--rbg)",tx:"var(--rtx)",br:"var(--rbr)"},
 };
 const nNF=()=>({id:Date.now()+Math.random(),cat:"",data:"",val:"",km:"",desc:"",outro:"",anexos:[],mapaNome:"",mapa:""});
@@ -411,8 +411,8 @@ function App(){
     setLoad(true);setMsg(null);
     try{
       const tipo=acao==="aprovar"
-        ?(perfil==="Rosimar"?"aprovarRosimar":"aprovarDario")
-        :(perfil==="Rosimar"?"rejeitarRosimar":"rejeitarDario");
+        ?(perfil==="Financeiro"?"aprovarFinanceiro":"aprovarDiretor")
+        :(perfil==="Financeiro"?"rejeitarFinanceiro":"rejeitarDiretor");
       const d=await apiCall({type:tipo,id,aprovador:usuario,comentario:coment});
       if(d.ok){
         setMsg({t:"ok",m:acao==="aprovar"?"Aprovado!":"Rejeitado."});
@@ -475,8 +475,8 @@ function App(){
           {perfil==="Prestador"&&<button onClick={()=>{setTela("form");setMsg(null);}} style={{flex:1,padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}}>+ Nova solicitacao</button>}
           <button onClick={()=>carregar()} style={{padding:"13px 18px",fontSize:16,border:"1px solid var(--border2)",borderRadius:10,background:"var(--bg)",cursor:"pointer",color:"var(--text2)"}}>{load?"...":"↻"}</button>
         </div>
-        {perfil==="Rosimar"&&<div style={{background:"var(--primary-lt)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--text)",fontWeight:500}}>Solicitacoes pendentes aguardam sua aprovacao.</div>}
-        {perfil==="Dario"&&<div style={{background:"var(--primary-lt)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--text)",fontWeight:500}}>Solicitacoes aprovadas por Rosimar aguardam sua aprovacao final.</div>}
+        {perfil==="Financeiro"&&<div style={{background:"var(--primary-lt)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--text)",fontWeight:500}}>Solicitacoes pendentes aguardam sua aprovacao.</div>}
+        {perfil==="Diretor Geral"&&<div style={{background:"var(--primary-lt)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--text)",fontWeight:500}}>Solicitacoes aprovadas pelo Financeiro aguardam sua aprovacao final.</div>}
         {sols.length===0&&<div style={{textAlign:"center",padding:"4rem 1rem",color:"var(--text2)"}}>
           <div style={{fontSize:48,marginBottom:12}}>📋</div>
           <p>Nenhuma solicitacao encontrada.</p>
@@ -540,8 +540,8 @@ function App(){
       {tela==="detalhe"&&det&&(()=>{
         const sv=sols.find(x=>x.ID_Solicitacao===det.ID_Solicitacao)||det;
         const sc=SC[sv.Status]||SC["Pendente"];
-        const pRosimar=perfil==="Rosimar"&&sv.Status==="Pendente";
-        const pDario=perfil==="Dario"&&sv.Status==="Aprovado Rosimar";
+        const pFinanceiro=perfil==="Financeiro"&&sv.Status==="Pendente";
+        const pDiretor=perfil==="Diretor Geral"&&sv.Status==="Aprovado Financeiro";
         return <div style={{paddingTop:4}}>
           <div className="card">
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
@@ -623,16 +623,16 @@ function App(){
           </div>}
 
           {sv.Comentario_Gestor&&<div className="card" style={{borderLeft:"3px solid var(--bbr)",borderRadius:"0 14px 14px 0"}}>
-            <p style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>Comentario de Rosimar</p>
+            <p style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>Comentario Financeiro</p>
             <p style={{fontSize:13,marginTop:4,color:"var(--text)"}}>{sv.Comentario_Gestor}</p>
           </div>}
           {sv.Comentario_RH&&<div className="card" style={{borderLeft:"3px solid var(--gbr)",borderRadius:"0 14px 14px 0"}}>
-            <p style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>Comentario de Dario</p>
+            <p style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>Comentario Diretor Geral</p>
             <p style={{fontSize:13,marginTop:4,color:"var(--text)"}}>{sv.Comentario_RH}</p>
           </div>}
 
-          {(pRosimar||pDario)&&<div className="card" style={{borderTop:"3px solid var(--primary)",borderRadius:"0 0 14px 14px"}}>
-            <p style={{fontWeight:600,fontSize:15,marginBottom:12,color:"var(--text)"}}>{pRosimar?"Aprovacao de Rosimar":"Aprovacao final de Dario"}</p>
+          {(pFinanceiro||pDiretor)&&<div className="card" style={{borderTop:"3px solid var(--primary)",borderRadius:"0 0 14px 14px"}}>
+            <p style={{fontWeight:600,fontSize:15,marginBottom:12,color:"var(--text)"}}>{pFinanceiro?"Aprovacao Financeiro":"Aprovacao Diretor Geral"}</p>
             <textarea value={coment} onChange={e=>setComent(e.target.value)} placeholder="Comentario (opcional)..." rows={3} style={{...I(false),resize:"vertical",marginBottom:14}}/>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <button onClick={()=>aprovar(sv.ID_Solicitacao,"rejeitar")} disabled={load} style={{padding:14,borderRadius:10,border:"1px solid var(--rbr)",background:"var(--rbg)",color:"var(--rtx)",cursor:"pointer",fontWeight:600,fontSize:15}}>Rejeitar</button>
