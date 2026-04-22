@@ -147,7 +147,7 @@ function NFCard({nf,idx,onUpd,onRem,showRem}){
         <div><label style={L}>Data</label><input type="date" style={I(false)} value={nf.data} onChange={e=>upd("data",e.target.value)}/></div>
         {isComb
           ?<div><label style={L}>KM percorridos</label><input type="number" style={I(false)} value={nf.km} onChange={e=>upd("km",e.target.value)} placeholder="Ex: 120" min="0" step="0.1" inputMode="decimal"/></div>
-          :<div><label style={L}>Valor (R$)</label><input type="number" style={I(false)} value={nf.val} onChange={e=>upd("val",e.target.value)} placeholder="0,00" min="0" step="0.01" inputMode="decimal"/></div>
+          :<div><label style={L}>Valor (R$)</label><input type="text" style={I(false)} value={nf.val} onChange={e=>upd("val",e.target.value.replace(",","."))} onBlur={e=>{const v=parseFloat(e.target.value.replace(",","."));if(!isNaN(v))upd("val",v.toFixed(2));}} placeholder="0,00" inputMode="decimal"/></div>
         }
       </div>
       {isComb&&nf.km&&<div style={{fontSize:14,fontWeight:700,color:"var(--otx)",background:"var(--obg)",padding:"8px 12px",borderRadius:8,marginBottom:12}}>
@@ -476,7 +476,7 @@ function App(){
       {tela==="lista"&&<>
         <div style={{display:"flex",gap:8,marginBottom:16}}>
           {perfil==="Prestador"&&<button onClick={()=>{setTela("form");setMsg(null);}} style={{flex:1,padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}}>+ Nova solicitacao</button>}
-          <button onClick={()=>carregar()} style={{padding:"13px 18px",fontSize:16,border:"1px solid var(--border2)",borderRadius:10,background:"var(--bg)",cursor:"pointer",color:"var(--text2)"}}>{load?"...":"↻"}</button>
+          <button onClick={()=>carregar(usuario,perfil)} style={{padding:"13px 18px",fontSize:16,border:"1px solid var(--border2)",borderRadius:10,background:"var(--bg)",cursor:"pointer",color:"var(--text2)"}}>{load?"...":"↻"}</button>
         </div>
         {perfil==="Financeiro"&&<div style={{background:"var(--primary-lt)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--text)",fontWeight:500}}>Solicitacoes pendentes aguardam sua aprovacao.</div>}
         {perfil==="Diretor Geral"&&<div style={{background:"var(--primary-lt)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"var(--text)",fontWeight:500}}>Solicitacoes aprovadas pelo Financeiro aguardam sua aprovacao final.</div>}
