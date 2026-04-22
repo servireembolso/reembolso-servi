@@ -304,7 +304,8 @@ function App(){
     setLoad(true);setMsg(null);
     try{
       const notas=form.notas.map(n=>{
-        let valor=n.val;
+        const valLimpo=(n.val||"").toString().replace(",",".");
+        let valor=parseFloat(valLimpo)||0;
         let descricao=n.desc;
         if(n.cat==="Combustivel"&&n.km){
           valor=((parseFloat(n.km)||0)*KM).toFixed(2);
@@ -321,7 +322,7 @@ function App(){
       const cats=[...new Set(notas.map(n=>n.cat).filter(Boolean))].join(", ");
       const total=form.notas.reduce((s,n)=>{
         if(n.cat==="Combustivel"&&n.km)return s+(parseFloat(n.km)||0)*KM;
-        return s+(parseFloat(n.val)||0);
+        return s+(parseFloat((n.val||"").toString().replace(",","."))||0);
       },0);
       const d=await apiCall({
         type:"rascunho",nome:form.nome,email:usuario,
@@ -360,7 +361,8 @@ function App(){
     setLoad(true);setMsg(null);
     try{
       const notas=form.notas.map(n=>{
-        let valor=n.val;
+        const valLimpo=(n.val||"").toString().replace(",",".");
+        let valor=parseFloat(valLimpo)||0;
         let descricao=n.desc;
         if(n.cat==="Combustivel"&&n.km){
           valor=((parseFloat(n.km)||0)*KM).toFixed(2);
