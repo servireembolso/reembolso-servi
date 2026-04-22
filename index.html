@@ -283,7 +283,7 @@ function App(){
 
   const total=form.notas.reduce((s,n)=>{
     if(n.cat==="Combustivel"&&n.km)return s+(parseFloat(n.km)||0)*KM;
-    return s+(parseFloat(n.val)||0);
+    return s+(parseFloat((n.val||"").toString().replace(",","."))||0);
   },0);
 
   const validar=()=>{
