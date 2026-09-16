@@ -331,15 +331,18 @@ const extrairDadosTexto = (texto) => {
 
   // 4. Detecção Inteligente de Categoria por Palavras-Chave
   const tLow = t.toLowerCase();
-  if(/restaurante|refeicao|refeicoes|almoco|jantar|lanche|lanchonete|churrascaria|pizzaria|padaria|cafe|burger|ifood|alimento|panificadora|buffet|subway|mcdonald|giraffas|spoleto/i.test(tLow)) {
+  if(/restaurante|refeicao|refeicoes|almoco|jantar|lanche|lanchonete|churrascaria|pizzaria|padaria|cafe|burger|ifood|alimento|panificadora|buffet|subway|mcdonald|giraffas|spoleto|mercado|supermercado|hipermercado|atacadista|assai|carrefour|extra|pao\s*de\s*acucar|hortifruti|acougue|mercearia|sacolao/i.test(tLow)) {
     res.cat = "Alimentacao";
-  } else if(/uber|99app|99\s*taxi|taxi|transporte|pedagio|estacionamento|passagem|metro|onibus|sem\s*parar|conectcar|veloe|voo|latam|gol|azul|aeroporto/i.test(tLow)) {
+  } else if(/uber|99app|99\s*taxi|99tecnologia|taxi|transporte|pedagio|estacionamento|passagem|metro|onibus|sem\s*parar|conectcar|veloe|auto\s*piste|autopista|ccr|ecovias|ecorodovias|voo|latam|gol|azul|aeroporto/i.test(tLow)) {
     res.cat = "Transporte";
   } else if(/hotel|pousada|hospedagem|hostel|diaria|ibis|resort|airbnb|booking/i.test(tLow)) {
     res.cat = "Hospedagem";
-  } else if(/gasolina|etanol|diesel|abastec|combustivel|lubrificante/i.test(tLow)) {
+  } else if(/posto|auto\s*posto|combustiveis|combustivel|gasolina|etanol|diesel|abastec|lubrificante|ipiranga|shell|petrobras|raizen|br\s*distribuidora/i.test(tLow)) {
     res.cat = "Combustivel";
-  } else if(/papelaria|kalunga|escritorio|impressao|xerox|cartucho|toner/i.test(tLow)) {
+  } else if(/farmacia|drogaria|droga\s*raia|drogasil|pague\s*menos|panvel|ultrafarma|medicamento/i.test(tLow)) {
+    res.cat = "Outro";
+    res.outro = "Farmácia / Medicamentos";
+  } else if(/papelaria|kalunga|escritorio|impressao|xerox|cartucho|toner|grafica/i.test(tLow)) {
     res.cat = "Material de escritorio";
   }
 
@@ -358,6 +361,37 @@ const extrairDadosTexto = (texto) => {
 
   return res;
 };
+
+// Helper seguro para carregar imagem sem travar evento
+const carregarImagemSegura = b64 => new Promise(resolve => {
+  if(!b64) return resolve(null);
+  const img = new Image();
+  let resolvido = false;
+  const finalizar = () => {
+    if(!resolvido) {
+      resolvido = true;
+      resolve(img);
+    }
+  };
+  img.onload = finalizar;
+  img.onerror = () => {
+    if(!resolvido) {
+      resolvido = true;
+      resolve(null);
+    }
+  };
+  img.src = b64;
+  if(img.complete && img.naturalWidth > 0) {
+    finalizar();
+  }
+  // Timeout de 4s para nunca travar a Promise
+  setTimeout(() => {
+    if(!resolvido) {
+      resolvido = true;
+      resolve(img.naturalWidth > 0 ? img : null);
+    }
+  }, 4000);
+});
 
 // Analisador Multi-Camadas (QR Code > PDF Texto > OCR Tesseract)
 const analisarComprovante = async (b64, nome) => {
@@ -387,10 +421,8 @@ const analisarComprovante = async (b64, nome) => {
     // CAMADA 2: QR Code Instantâneo com jsQR em Imagem (<30ms)
     let canvasOtimizado = null;
     if(!isPDF) {
-      const img = new Image();
-      img.src = b64;
-      await new Promise(r => { img.onload = r; img.onerror = r; });
-      if(img.width > 0 && img.height > 0) {
+      const img = await carregarImagemSegura(b64);
+      if(img && img.width > 0 && img.height > 0) {
         // Redimensionar para tamanho ideal de leitura rápida (max 1200px)
         const maxDim = 1200;
         let w = img.width, h = img.height;
@@ -415,19 +447,26 @@ const analisarComprovante = async (b64, nome) => {
       }
     }
 
-    // CAMADA 3: OCR Óptico com Tesseract.js (para ler Valor/Data impressos na nota caso o QR não traga)
+    // CAMADA 3: OCR Óptico com Tesseract.js (com timeout de segurança de 10s)
     if((!resultado.valor || !resultado.cat) && window.Tesseract && !isPDF && canvasOtimizado) {
-      const res = await Tesseract.recognize(canvasOtimizado, 'por');
-      if(res && res.data && res.data.text) {
-        const dadosOcr = extrairDadosTexto(res.data.text);
-        if(dadosOcr) {
-          if(dadosOcr.valor && !resultado.valor) resultado.valor = dadosOcr.valor;
-          if(dadosOcr.data && !resultado.data) resultado.data = dadosOcr.data;
-          if(dadosOcr.cat && !resultado.cat) resultado.cat = dadosOcr.cat;
-          if(dadosOcr.desc && (!resultado.desc || resultado.desc.startsWith("NFC-e"))) {
-            resultado.desc = dadosOcr.desc + (resultado.desc ? " (" + resultado.desc + ")" : "");
+      try {
+        const ocrPromise = Tesseract.recognize(canvasOtimizado, 'por');
+        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 10000));
+        const res = await Promise.race([ocrPromise, timeoutPromise]);
+        if(res && res.data && res.data.text) {
+          const dadosOcr = extrairDadosTexto(res.data.text);
+          if(dadosOcr) {
+            if(dadosOcr.valor && !resultado.valor) resultado.valor = dadosOcr.valor;
+            if(dadosOcr.data && !resultado.data) resultado.data = dadosOcr.data;
+            if(dadosOcr.cat && !resultado.cat) resultado.cat = dadosOcr.cat;
+            if(dadosOcr.outro && !resultado.outro) resultado.outro = dadosOcr.outro;
+            if(dadosOcr.desc && (!resultado.desc || resultado.desc.startsWith("NFC-e"))) {
+              resultado.desc = dadosOcr.desc + (resultado.desc ? " (" + resultado.desc + ")" : "");
+            }
           }
         }
+      } catch(ocrErr) {
+        console.warn("Aviso OCR:", ocrErr);
       }
     }
   } catch(err) {
@@ -504,11 +543,12 @@ function AnexoBtn({label, icon, onFile, accept, capture}){
   </label>;
 }
 
-function NFCard({nf, idx, onUpd, onRem, showRem, onPreview}){
+function NFCard({nf, idx, onUpd, onUpdCampos, onRem, showRem, onPreview}){
   const isComb = nf.cat === "Combustivel";
   const isOutro = nf.cat === "Outro";
   const kmVal = isComb && nf.km ? (parseFloat(nf.km || 0) * KM).toFixed(2) : "";
-  const upd = (c, v) => onUpd(idx, c, v);
+  const upd = (c, v) => onUpd(nf.id || idx, c, v);
+  const updCampos = (campos) => onUpdCampos ? onUpdCampos(nf.id || idx, campos) : Object.entries(campos).forEach(([c, v]) => upd(c, v));
 
   const [lendoNF, setLendoNF] = useState(false);
   const [statusLeitura, setStatusLeitura] = useState(null);
@@ -516,40 +556,53 @@ function NFCard({nf, idx, onUpd, onRem, showRem, onPreview}){
   const adicionarAnexo = (b64, nome) => upd("anexos", [...(nf.anexos || []), {id: Date.now() + Math.random(), b64, nome}]);
   const removerAnexo = ai => upd("anexos", (nf.anexos || []).filter((_, i) => i !== ai));
 
-  // Processamento e Leitura Automática Inteligente da Nota Fiscal
+  // Processamento e Leitura Automática Inteligente da Nota Fiscal (NF1, NF2, etc.)
   const processarComprovanteAuto = async (b64, nome) => {
-    adicionarAnexo(b64, nome);
+    const novoAnexo = { id: Date.now() + Math.random(), b64, nome };
+    const anexosAtualizados = [...(nf.anexos || []), novoAnexo];
+    
+    // Atualiza imediatamente o anexo
+    upd("anexos", anexosAtualizados);
     setLendoNF(true);
     setStatusLeitura("⏳ Lendo comprovante (QR Code / OCR)...");
+
     try {
       const dados = await analisarComprovante(b64, nome);
       if (dados) {
         let campos = [];
+        const mudancas = {};
+
         if (dados.cat && !nf.cat) {
-          upd("cat", dados.cat);
+          mudancas.cat = dados.cat;
           campos.push("Categoria (" + dados.cat + ")");
         }
         if (dados.valor) {
           const valFormatado = formatarValorParaInput(dados.valor);
           if (valFormatado) {
-            upd("val", valFormatado);
+            mudancas.val = valFormatado;
             campos.push("Valor (R$ " + valFormatado + ")");
           }
           if ((dados.cat === "Combustivel" || nf.cat === "Combustivel") && !nf.km) {
             const kmCalc = (parseMoeda(dados.valor) / KM).toFixed(1);
-            upd("km", kmCalc);
+            mudancas.km = kmCalc;
             campos.push("KM (~" + kmCalc + " km)");
           }
         }
         if (dados.data && !nf.data) {
-          upd("data", dados.data);
+          mudancas.data = dados.data;
           campos.push("Data");
         }
         if (dados.desc && !nf.desc) {
-          upd("desc", dados.desc);
+          mudancas.desc = dados.desc;
           campos.push("Descrição");
         }
-        if (campos.length > 0) {
+        if (dados.outro && !nf.outro) {
+          mudancas.outro = dados.outro;
+        }
+
+        // Aplica todas as mudanças de uma só vez (ATÔMICO)
+        if (Object.keys(mudancas).length > 0) {
+          updCampos(mudancas);
           setStatusLeitura("✨ Auto-completado: " + campos.join(", ") + "!");
         } else {
           setStatusLeitura("✓ Comprovante anexado!");
@@ -596,100 +649,98 @@ function NFCard({nf, idx, onUpd, onRem, showRem, onPreview}){
 
     {/* CATEGORIA */}
     <div style={{marginBottom:12}}>
-      <label style={L}>Categoria</label>
+      <label style={L}>Categoria *</label>
       <select style={I(false)} value={nf.cat} onChange={e=>upd("cat",e.target.value)}>
-        <option value="">Selecione ou anexe o comprovante acima...</option>
+        <option value="">Selecione a categoria ou anexe acima...</option>
         {CATS.map(c=><option key={c}>{c}</option>)}
       </select>
     </div>
 
-    {nf.cat && <>
-      {isOutro && <div style={{marginBottom:12}}>
-        <label style={L}>Tipo de despesa</label>
-        <input style={I(false)} value={nf.outro} onChange={e=>upd("outro",e.target.value)} placeholder="Ex: Curso, Ferramenta..."/>
-      </div>}
-      {isComb && <div style={{background:"var(--obg)",border:"1px solid var(--obr)",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"var(--otx)",fontWeight:500}}>
-        Informe os KM - valor calculado automaticamente (x R$ {KM.toFixed(2)}/km)
-      </div>}
-      <div style={{...G2,marginBottom:12}}>
-        <div><label style={L}>Data</label><input type="date" style={I(false)} value={nf.data} onChange={e=>upd("data",e.target.value)}/></div>
-        {isComb
-          ? <div>
-              <label style={L}>KM percorridos</label>
-              <input type="number" style={I(false)} value={nf.km} onChange={e=>upd("km",e.target.value)} placeholder="Ex: 120" min="0" step="0.1" inputMode="decimal"/>
-              {nf.val && <span style={{fontSize:11,color:"var(--text2)",display:"block",marginTop:4}}>Valor no comprovante: <strong>R$ {nf.val}</strong></span>}
-            </div>
-          : <div>
-              <label style={L}>Valor (R$)</label>
-              <input type="text" style={I(false)} value={nf.val} onChange={e=>upd("val", formatarMoedaInput(e.target.value))} placeholder="0,00" inputMode="numeric"/>
-            </div>
-        }
+    {isOutro && <div style={{marginBottom:12}}>
+      <label style={L}>Tipo de despesa</label>
+      <input style={I(false)} value={nf.outro} onChange={e=>upd("outro",e.target.value)} placeholder="Ex: Curso, Ferramenta, Farmácia..."/>
+    </div>}
+    {isComb && <div style={{background:"var(--obg)",border:"1px solid var(--obr)",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"var(--otx)",fontWeight:500}}>
+      Informe os KM - valor calculado automaticamente (x R$ {KM.toFixed(2)}/km)
+    </div>}
+    <div style={{...G2,marginBottom:12}}>
+      <div><label style={L}>Data *</label><input type="date" style={I(false)} value={nf.data} onChange={e=>upd("data",e.target.value)}/></div>
+      {isComb
+        ? <div>
+            <label style={L}>KM percorridos *</label>
+            <input type="number" style={I(false)} value={nf.km} onChange={e=>upd("km",e.target.value)} placeholder="Ex: 120" min="0" step="0.1" inputMode="decimal"/>
+            {nf.val && <span style={{fontSize:11,color:"var(--text2)",display:"block",marginTop:4}}>Valor no comprovante: <strong>R$ {nf.val}</strong></span>}
+          </div>
+        : <div>
+            <label style={L}>Valor (R$) *</label>
+            <input type="text" style={I(false)} value={nf.val} onChange={e=>upd("val", formatarMoedaInput(e.target.value))} placeholder="0,00" inputMode="numeric"/>
+          </div>
+      }
+    </div>
+    {isComb && nf.km && <div style={{fontSize:14,fontWeight:700,color:"var(--otx)",background:"var(--obg)",padding:"8px 12px",borderRadius:8,marginBottom:12}}>
+      {nf.km} km x R$ {KM.toFixed(2)} = R$ {fmtMoeda(kmVal)}
+    </div>}
+    <div style={{marginBottom:12}}>
+      <label style={L}>Descrição</label>
+      <input style={I(false)} value={nf.desc} onChange={e=>upd("desc",e.target.value)} placeholder="Ex: Almoço com cliente, combustível..."/>
+    </div>
+    
+    {/* SEÇÃO DE COMPROVANTES ANEXADOS */}
+    <div style={{marginBottom:isComb?12:0}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+        <label style={L}>Comprovantes Anexados ({(nf.anexos||[]).length})</label>
+        <span style={{fontSize:11,color:"var(--text3)"}}>Toque na foto para ampliar</span>
       </div>
-      {isComb && nf.km && <div style={{fontSize:14,fontWeight:700,color:"var(--otx)",background:"var(--obg)",padding:"8px 12px",borderRadius:8,marginBottom:12}}>
-        {nf.km} km x R$ {KM.toFixed(2)} = R$ {fmtMoeda(kmVal)}
-      </div>}
-      <div style={{marginBottom:12}}>
-        <label style={L}>Descrição</label>
-        <input style={I(false)} value={nf.desc} onChange={e=>upd("desc",e.target.value)} placeholder="Ex: Almoço com cliente"/>
+      <div style={{border:"1px dashed var(--border2)",borderRadius:10,overflow:"hidden",display:"flex",marginBottom:8}}>
+        <AnexoBtn label="Câmera" icon="📷" onFile={processarComprovanteAuto} accept="image/*" capture="environment"/>
+        <div style={{width:"1px",background:"var(--border2)"}}/>
+        <AnexoBtn label="Galeria / PDF" icon="🖼️" onFile={processarComprovanteAuto} accept="image/*,image/heic,image/heif,.pdf"/>
       </div>
       
-      {/* SEÇÃO DE ANEXOS DA NOTA */}
-      <div style={{marginBottom:isComb?12:0}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-          <label style={L}>Comprovantes Anexados ({(nf.anexos||[]).length})</label>
-          <span style={{fontSize:11,color:"var(--text3)"}}>Toque na foto para ampliar</span>
-        </div>
-        <div style={{border:"1px dashed var(--border2)",borderRadius:10,overflow:"hidden",display:"flex",marginBottom:8}}>
-          <AnexoBtn label="Câmera" icon="📷" onFile={processarComprovanteAuto} accept="image/*" capture="environment"/>
-          <div style={{width:"1px",background:"var(--border2)"}}/>
-          <AnexoBtn label="Galeria / PDF" icon="🖼️" onFile={processarComprovanteAuto} accept="image/*,image/heic,image/heif,.pdf"/>
-        </div>
-        
-        {(nf.anexos||[]).map((a, ai)=>{
-          const isImg = (a.b64 && a.b64.startsWith("data:image")) || (a.url && (a.url.includes("drive.google.com") || a.url.includes("drive.usercontent") || a.url.match(/\.(jpeg|jpg|png|webp)/i)));
-          const imgSrc = (a.b64 && a.b64.startsWith("data:image")) ? a.b64 : (a.url ? a.url.replace("export=download","export=view") : "");
-          const previewTarget = a.b64 || a.url;
+      {(nf.anexos||[]).map((a, ai)=>{
+        const isImg = (a.b64 && a.b64.startsWith("data:image")) || (a.url && (a.url.includes("drive.google.com") || a.url.includes("drive.usercontent") || a.url.match(/\.(jpeg|jpg|png|webp)/i)));
+        const imgSrc = (a.b64 && a.b64.startsWith("data:image")) ? a.b64 : (a.url ? a.url.replace("export=download","export=view") : "");
+        const previewTarget = a.b64 || a.url;
 
-          return <div key={a.id || ai} style={{padding:"6px 10px",fontSize:12,color:"var(--gtx)",background:"var(--gbg)",display:"flex",alignItems:"center",gap:8,borderRadius:8,marginBottom:4,border:"1px solid var(--gbr)"}}>
-            {isImg && imgSrc ? (
-              <img src={imgSrc} alt="Thumb" onClick={()=>previewTarget && onPreview(previewTarget, a.nome)} style={{width:34,height:34,borderRadius:4,objectFit:"cover",border:"1px solid var(--gbr)",cursor:"pointer"}} title="Clique para ampliar"/>
-            ) : (
-              <span style={{fontSize:20,cursor:"pointer"}} onClick={()=>previewTarget && onPreview(previewTarget, a.nome)}>
-                {a.nome && a.nome.toLowerCase().endsWith(".pdf") ? "📄" : "📎"}
-              </span>
-            )}
-            <div style={{flex:1,overflow:"hidden",cursor:"pointer"}} onClick={()=>previewTarget && onPreview(previewTarget, a.nome)}>
-              <p style={{margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{a.nome || "Anexo"}</p>
-              {a.url && <span style={{fontSize:10,color:"var(--text3)"}}>✓ Salvo no Google Drive</span>}
-            </div>
-            <button type="button" onClick={()=>removerAnexo(ai)} title="Remover anexo" style={{background:"none",border:"none",cursor:"pointer",color:"var(--rtx)",fontSize:16,fontWeight:"bold",padding:4}}>✕</button>
-          </div>;
-        })}
+        return <div key={a.id || ai} style={{padding:"6px 10px",fontSize:12,color:"var(--gtx)",background:"var(--gbg)",display:"flex",alignItems:"center",gap:8,borderRadius:8,marginBottom:4,border:"1px solid var(--gbr)"}}>
+          {isImg && imgSrc ? (
+            <img src={imgSrc} alt="Thumb" onClick={()=>previewTarget && onPreview(previewTarget, a.nome)} style={{width:34,height:34,borderRadius:4,objectFit:"cover",border:"1px solid var(--gbr)",cursor:"pointer"}} title="Clique para ampliar"/>
+          ) : (
+            <span style={{fontSize:20,cursor:"pointer"}} onClick={()=>previewTarget && onPreview(previewTarget, a.nome)}>
+              {a.nome && a.nome.toLowerCase().endsWith(".pdf") ? "📄" : "📎"}
+            </span>
+          )}
+          <div style={{flex:1,overflow:"hidden",cursor:"pointer"}} onClick={()=>previewTarget && onPreview(previewTarget, a.nome)}>
+            <p style={{margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{a.nome || "Anexo"}</p>
+            {a.url && <span style={{fontSize:10,color:"var(--text3)"}}>✓ Salvo no Google Drive</span>}
+          </div>
+          <button type="button" onClick={()=>removerAnexo(ai)} title="Remover anexo" style={{background:"none",border:"none",cursor:"pointer",color:"var(--rtx)",fontSize:16,fontWeight:"bold",padding:4}}>✕</button>
+        </div>;
+      })}
+    </div>
+
+    {/* SEÇÃO DE COMPROVANTE DE ROTA (KM) */}
+    {isComb && <div>
+      <label style={L}>Print do Google Maps (comprovante de rota)</label>
+      <div style={{border:"1px dashed var(--border2)",borderRadius:10,overflow:"hidden",display:"flex"}}>
+        <AnexoBtn label="Câmera" icon="📷" onFile={(b,n)=>{upd("mapa",b);upd("mapaNome",n);}} accept="image/*" capture="environment"/>
+        <div style={{width:"1px",background:"var(--border2)"}}/>
+        <AnexoBtn label="Galeria" icon="🗺️" onFile={(b,n)=>{upd("mapa",b);upd("mapaNome",n);}} accept="image/*,image/heic,image/heif"/>
       </div>
-
-      {/* SEÇÃO DE COMPROVANTE DE ROTA (KM) */}
-      {isComb && <div>
-        <label style={L}>Print do Google Maps (comprovante de rota)</label>
-        <div style={{border:"1px dashed var(--border2)",borderRadius:10,overflow:"hidden",display:"flex"}}>
-          <AnexoBtn label="Câmera" icon="📷" onFile={(b,n)=>{upd("mapa",b);upd("mapaNome",n);}} accept="image/*" capture="environment"/>
-          <div style={{width:"1px",background:"var(--border2)"}}/>
-          <AnexoBtn label="Galeria" icon="🗺️" onFile={(b,n)=>{upd("mapa",b);upd("mapaNome",n);}} accept="image/*,image/heic,image/heif"/>
-        </div>
-        {nf.mapaNome && (() => {
-          const isImg = (nf.mapa && nf.mapa.startsWith("data:image")) || (nf.mapa && (nf.mapa.includes("drive.google.com") || nf.mapa.includes("drive.usercontent")));
-          const imgSrc = (nf.mapa && nf.mapa.startsWith("data:image")) ? nf.mapa : nf.mapa;
-          return <div style={{padding:"6px 10px",fontSize:12,color:"var(--gtx)",background:"var(--gbg)",display:"flex",alignItems:"center",gap:8,borderRadius:"0 0 10px 10px",border:"1px solid var(--gbr)",borderTop:"none"}}>
-            {isImg ? (
-              <img src={imgSrc} alt="Thumb Rota" onClick={()=>onPreview(nf.mapa, nf.mapaNome)} style={{width:32,height:32,borderRadius:4,objectFit:"cover",cursor:"pointer"}} title="Clique para ampliar"/>
-            ) : (
-              <span style={{fontSize:20}}>🗺️</span>
-            )}
-            <span onClick={()=>nf.mapa && onPreview(nf.mapa, nf.mapaNome)} style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer"}}>{nf.mapaNome}</span>
-            <button type="button" onClick={()=>{upd("mapa","");upd("mapaNome","");}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--rtx)",fontSize:16,fontWeight:"bold",padding:4}}>✕</button>
-          </div>;
-        })()}
-      </div>}
-    </>}
+      {nf.mapaNome && (() => {
+        const isImg = (nf.mapa && nf.mapa.startsWith("data:image")) || (nf.mapa && (nf.mapa.includes("drive.google.com") || nf.mapa.includes("drive.usercontent")));
+        const imgSrc = (nf.mapa && nf.mapa.startsWith("data:image")) ? nf.mapa : nf.mapa;
+        return <div style={{padding:"6px 10px",fontSize:12,color:"var(--gtx)",background:"var(--gbg)",display:"flex",alignItems:"center",gap:8,borderRadius:"0 0 10px 10px",border:"1px solid var(--gbr)",borderTop:"none"}}>
+          {isImg ? (
+            <img src={imgSrc} alt="Thumb Rota" onClick={()=>onPreview(nf.mapa, nf.mapaNome)} style={{width:32,height:32,borderRadius:4,objectFit:"cover",cursor:"pointer"}} title="Clique para ampliar"/>
+          ) : (
+            <span style={{fontSize:20}}>🗺️</span>
+          )}
+          <span onClick={()=>nf.mapa && onPreview(nf.mapa, nf.mapaNome)} style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer"}}>{nf.mapaNome}</span>
+          <button type="button" onClick={()=>{upd("mapa","");upd("mapaNome","");}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--rtx)",fontSize:16,fontWeight:"bold",padding:4}}>✕</button>
+        </div>;
+      })()}
+    </div>}
   </div>;
 }
 
@@ -813,6 +864,8 @@ function App(){
   const descartarRascunhoLocal = () => {
     try { localStorage.removeItem("reembolso_local_draft"); } catch {}
     setTemRascunhoLocal(false);
+    setForm(nForm());
+    setMsg({ t: "ok", m: "Rascunho local descartado com sucesso." });
   };
 
   const apiCall = async body => {
@@ -893,7 +946,15 @@ function App(){
     setLoad(false);
   };
 
-  const updNota = (idx, c, v) => setForm(f => ({ ...f, notas: f.notas.map((n, i) => i === idx ? { ...n, [c]: v } : n) }));
+  const updNota = (idOuIdx, c, v) => setForm(f => ({
+    ...f,
+    notas: f.notas.map((n, i) => (n.id === idOuIdx || i === idOuIdx) ? { ...n, [c]: v } : n)
+  }));
+
+  const updNotaCampos = (idOuIdx, campos) => setForm(f => ({
+    ...f,
+    notas: f.notas.map((n, i) => (n.id === idOuIdx || i === idOuIdx) ? { ...n, ...campos } : n)
+  }));
 
   const total = useMemo(() => {
     return form.notas.reduce((s, n) => {
@@ -950,7 +1011,8 @@ function App(){
       const cats = [...new Set(notas.map(n => n.cat).filter(Boolean))].join(", ");
       
       if(form._editId) {
-        await apiCall({ type: "excluir", id: form._editId, email: usuario });
+        const userEmail = (usuario || "").trim().toLowerCase();
+        await apiCall({ type: "excluir", id: form._editId, email: userEmail });
       }
 
       const d = await apiCall({
@@ -975,18 +1037,23 @@ function App(){
     setLoad(false);
   };
 
-  // EXCLUIR SOLICITACAO
+  // EXCLUIR SOLICITACAO OU RASCUNHO
   const excluir = async id => {
-    if(!window.confirm("Confirma a exclusão definitiva desta solicitação?")) return;
+    if(!id) return;
+    if(!window.confirm("Confirma a exclusão definitiva deste rascunho/solicitação?")) return;
     setLoad(true);
     try {
-      const d = await apiCall({ type: "excluir", id, email: usuario });
-      if(d.ok) {
-        setMsg({ t: "ok", m: "Solicitação excluída com sucesso." });
+      const userEmail = (usuario || "").trim().toLowerCase();
+      const d = await apiCall({ type: "excluir", id, email: userEmail });
+      if(d && (d.ok || d.status === "ok" || d.success)) {
+        setMsg({ t: "ok", m: "Solicitação/rascunho excluído com sucesso." });
+        try { localStorage.removeItem("reembolso_local_draft"); } catch {}
+        setForm(nForm());
         await carregar(usuario, perfil);
         setTela("lista");
       } else {
-        setMsg({ t: "err", m: d.msg || "Não foi possível excluir." });
+        setMsg({ t: "err", m: (d && d.msg) ? d.msg : "Não foi possível excluir no servidor." });
+        await carregar(usuario, perfil);
       }
     } catch(err) {
       setMsg({ t: "err", m: "Erro: " + err.message });
@@ -1252,6 +1319,33 @@ function App(){
                 <p style={{fontWeight:600,fontSize:15,color:"var(--text)"}}>{s.Nome_Colaborador}</p>
                 <p style={{fontSize:13,color:"var(--text2)",marginTop:3}}>{s.Departamento} - {s.Categoria}</p>
                 <p style={{fontSize:11,color:"var(--text3)",marginTop:3}}>{s.ID_Solicitacao}</p>
+                {s.Status === "Rascunho" && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      excluir(s.ID_Solicitacao);
+                    }}
+                    disabled={load}
+                    title="Excluir este rascunho"
+                    style={{
+                      marginTop: 8,
+                      padding: "5px 10px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      borderRadius: 7,
+                      border: "1px solid var(--rbr)",
+                      background: "var(--rbg)",
+                      color: "var(--rtx)",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4
+                    }}
+                  >
+                    🗑️ Excluir Rascunho
+                  </button>
+                )}
               </div>
               <div style={{textAlign:"right",marginLeft:12}}>
                 <p style={{fontWeight:700,fontSize:16,color:"var(--text)"}}>R$ {fmtMoeda(s.Valor_Total)}</p>
@@ -1277,9 +1371,36 @@ function App(){
           </div>
         )}
 
+        {/* ALERTA DE EDIÇÃO DE RASCUNHO SALVO NO BACKEND */}
+        {form._editId && (
+          <div style={{background:"var(--obg)",border:"1px solid var(--obr)",borderRadius:12,padding:"10px 14px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <p style={{fontSize:13,fontWeight:600,color:"var(--otx)",margin:0}}>✏️ Editando Rascunho ({form._editId})</p>
+              <p style={{fontSize:11,color:"var(--text2)",margin:"2px 0 0"}}>Ao salvar ou enviar, as alterações serão atualizadas.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => excluir(form._editId)}
+              disabled={load}
+              style={{
+                padding:"6px 12px",
+                borderRadius:6,
+                border:"1px solid var(--rbr)",
+                background:"var(--rbg)",
+                color:"var(--rtx)",
+                fontSize:12,
+                fontWeight:600,
+                cursor:"pointer"
+              }}
+            >
+              🗑️ Excluir Rascunho
+            </button>
+          </div>
+        )}
+
         <div className="card">
           <p style={{fontWeight:600,fontSize:14,marginBottom:14,color:"var(--text)"}}>
-            {form._editId ? `Editando Rascunho (${form._editId})` : "Dados gerais"}
+            {form._editId ? `Dados Gerais (${form._editId})` : "Dados gerais"}
           </p>
           <div style={G2}>
             <div><label style={L}>Nome *</label><input style={I(erros.nome)} value={form.nome} onChange={e=>setForm(f=>({...f,nome:e.target.value}))} placeholder="Nome completo"/></div>
@@ -1312,7 +1433,7 @@ function App(){
             <button type="button" onClick={()=>setForm(f=>({...f,notas:[...f.notas,nNF()]}))} style={{fontSize:13,padding:"6px 14px",borderRadius:8,border:"1px solid var(--border2)",background:"var(--bg)",cursor:"pointer",color:"var(--text)",fontWeight:500}}>+ Adicionar NF</button>
           </div>
           {form.notas.map((nf, idx) => (
-            <NFCard key={nf.id || idx} nf={nf} idx={idx} onUpd={updNota} onRem={()=>setForm(f=>({...f,notas:f.notas.filter((_,i)=>i!==idx)}))} showRem={form.notas.length>1} onPreview={(src, nome)=>setModalImg({src, nome})}/>
+            <NFCard key={nf.id || idx} nf={nf} idx={idx} onUpd={updNota} onUpdCampos={updNotaCampos} onRem={()=>setForm(f=>({...f,notas:f.notas.filter((_,i)=>i!==idx)}))} showRem={form.notas.length>1} onPreview={(src, nome)=>setModalImg({src, nome})}/>
           ))}
           <div style={{display:"flex",justifyContent:"space-between",padding:14,background:"var(--bg3)",borderRadius:10}}>
             <span style={{color:"var(--text2)",fontWeight:500}}>Total Geral</span>
@@ -1453,8 +1574,8 @@ function App(){
             </div>;
           })}
 
-          {/* AÇÕES DE PRESTADOR */}
-          {perfil === "Prestador" && (sv.Status === "Rascunho" || sv.Status === "Pendente") && <div className="card">
+          {/* AÇÕES DE PRESTADOR / RASCUNHO */}
+          {(perfil === "Prestador" || sv.Status === "Rascunho") && (sv.Status === "Rascunho" || sv.Status === "Pendente") && <div className="card">
             <div style={{display:"grid",gridTemplateColumns:sv.Status==="Rascunho"?"1fr 1fr":"1fr",gap:12}}>
               {sv.Status === "Rascunho" && <button onClick={() => {
                 const notasMapeadas = (sv.notas || []).length > 0 ? (sv.notas || []).map((n, nIdx) => {
@@ -1562,7 +1683,7 @@ function App(){
             </div>
           </div>}
 
-          {perfil === "Prestador" && sv.Status === "Rascunho" && <div className="card">
+          {sv.Status === "Rascunho" && <div className="card">
             <button onClick={async () => {
               if(!window.confirm("Enviar esta solicitação para aprovação?")) return;
               setLoad(true);
