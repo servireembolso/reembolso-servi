@@ -799,6 +799,13 @@ function App(){
   const [confSenha, setConfSenha] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [perfilTmp, setPerfilTmp] = useState(null);
+
+  // Estados de Esqueci a Senha e Recuperação via PIN numérico
+  const [etapaEsqueci, setEtapaEsqueci] = useState(1);
+  const [codigoReset, setCodigoReset] = useState("");
+  const [novaSenhaReset, setNovaSenhaReset] = useState("");
+  const [confSenhaReset, setConfSenhaReset] = useState("");
+  const [showPwdReset, setShowPwdReset] = useState(false);
   
   const [sols, setSols] = useState([]);
   const [filtroStatus, setFiltroStatus] = useState("Todos");
@@ -896,14 +903,27 @@ function App(){
   }, []);
 
   const login = async () => {
-    if(!emailL.trim() || !senha.trim()) return;
+    if(!emailL.trim()) {
+      setMsg({ t: "err", m: "Informe o seu e-mail." });
+      return;
+    }
+    const cleanSenha = senha.replace(/\D/g, "");
+    if(!cleanSenha) {
+      setMsg({ t: "err", m: "Informe sua senha de 6 números." });
+      return;
+    }
+    if(cleanSenha.length !== 6) {
+      setMsg({ t: "err", m: "A senha deve conter exatamente 6 números." });
+      return;
+    }
     setLoad(true); setMsg(null);
     try {
       const em = emailL.trim().toLowerCase();
-      const d = await apiCall({ type: "login", email: em, senha: senha.trim() });
+      const d = await apiCall({ type: "login", email: em, senha: cleanSenha });
       if(d.primeiroAcesso) {
         setPerfilTmp(d.perfil);
         setTela("criarSenha");
+        setMsg({ t: "ok", m: "Primeiro acesso identificado! Crie seu PIN de 6 números." });
       } else if(d.ok && d.perfil) {
         setUsuario(em);
         setPerfil(d.perfil);
@@ -922,13 +942,15 @@ function App(){
   };
 
   const criarSenha = async () => {
-    if(!novaSenha.trim() || !confSenha.trim()) { setMsg({ t: "err", m: "Preencha os dois campos." }); return; }
-    if(novaSenha.length < 6) { setMsg({ t: "err", m: "Mínimo 6 caracteres." }); return; }
-    if(novaSenha !== confSenha) { setMsg({ t: "err", m: "As senhas não coincidem." }); return; }
+    const s1 = novaSenha.replace(/\D/g, "");
+    const s2 = confSenha.replace(/\D/g, "");
+    if(!s1 || !s2) { setMsg({ t: "err", m: "Preencha os dois campos de senha." }); return; }
+    if(s1.length !== 6) { setMsg({ t: "err", m: "A senha deve conter exatamente 6 números." }); return; }
+    if(s1 !== s2) { setMsg({ t: "err", m: "As senhas não coincidem." }); return; }
     setLoad(true); setMsg(null);
     try {
       const em = emailL.trim().toLowerCase();
-      const d = await apiCall({ type: "criarSenha", email: em, senha: novaSenha.trim() });
+      const d = await apiCall({ type: "criarSenha", email: em, senha: s1 });
       if(d.ok) {
         const pf = d.perfil || perfilTmp;
         setUsuario(em); setPerfil(pf);
@@ -942,6 +964,86 @@ function App(){
       }
     } catch {
       setMsg({ t: "err", m: "Erro de conexão." });
+    }
+    setLoad(false);
+  };
+
+  const solicitarCodigoReset = async () => {
+    if(!emailL.trim()) {
+      setMsg({ t: "err", m: "Informe o e-mail cadastrado na empresa." });
+      return;
+    }
+    setLoad(true); setMsg(null);
+    try {
+      const em = emailL.trim().toLowerCase();
+      const d = await apiCall({ type: "esqueciSenha", email: em });
+      if(d.ok) {
+        setEtapaEsqueci(2);
+        setMsg({ t: "ok", m: d.msg || `Código de 6 dígitos enviado para ${em}!` });
+      } else {
+        setMsg({ t: "err", m: d.msg || d.erro || "E-mail não encontrado ou inativo." });
+      }
+    } catch {
+      setMsg({ t: "err", m: "Erro de conexão ao solicitar recuperação de senha." });
+    }
+    setLoad(false);
+  };
+
+  const redefinirSenha = async () => {
+    const cod = codigoReset.replace(/\D/g, "");
+    const s1 = novaSenhaReset.replace(/\D/g, "");
+    const s2 = confSenhaReset.replace(/\D/g, "");
+
+    if(!cod || cod.length !== 6) {
+      setMsg({ t: "err", m: "Informe o código de verificação de 6 números." });
+      return;
+    }
+    if(!s1 || !s2) {
+      setMsg({ t: "err", m: "Preencha a nova senha e a confirmação." });
+      return;
+    }
+    if(s1.length !== 6) {
+      setMsg({ t: "err", m: "A nova senha deve conter exatamente 6 números." });
+      return;
+    }
+    if(s1 !== s2) {
+      setMsg({ t: "err", m: "As senhas não coincidem." });
+      return;
+    }
+
+    setLoad(true); setMsg(null);
+    try {
+      const em = emailL.trim().toLowerCase();
+      const d = await apiCall({
+        type: "redefinirSenha",
+        email: em,
+        codigo: cod,
+        senha: s1
+      });
+      if(d.ok) {
+        if(d.perfil) {
+          setUsuario(em);
+          setPerfil(d.perfil);
+          try {
+            localStorage.setItem("user_session", JSON.stringify({ email: em, perfil: d.perfil }));
+          } catch {}
+          await carregar(em, d.perfil);
+          setTela("lista");
+          setMsg({ t: "ok", m: "Senha redefinida com sucesso! Bem-vindo(a)." });
+        } else {
+          setSenha("");
+          setTela("login");
+          setMsg({ t: "ok", m: "Senha redefinida com sucesso! Digite sua nova senha de 6 números para entrar." });
+        }
+        setCodigoReset("");
+        setNovaSenhaReset("");
+        setConfSenhaReset("");
+        setEtapaEsqueci(1);
+      } else {
+        setMsg({ t: "err", m: d.msg || d.erro || "Código de verificação incorreto ou expirado." });
+      }
+    } catch {
+      setMsg({ t: "err", m: "Erro de conexão ao redefinir senha." });
     }
     setLoad(false);
   };
@@ -1166,7 +1268,10 @@ function App(){
   const goSair = () => {
     if(window.confirm("Deseja realmente sair da sua conta?")) {
       try { localStorage.removeItem("user_session"); } catch {}
-      setUsuario(null); setPerfil(null); setSenha(""); setEmailL(""); setTela("login"); setMsg(null);
+      setUsuario(null); setPerfil(null); setSenha(""); setEmailL("");
+      setNovaSenha(""); setConfSenha("");
+      setCodigoReset(""); setNovaSenhaReset(""); setConfSenhaReset(""); setEtapaEsqueci(1);
+      setTela("login"); setMsg(null);
     }
   };
 
@@ -1207,36 +1312,229 @@ function App(){
     };
   }, [sols]);
 
-  if(tela === "login" || tela === "criarSenha") return <>
-    <Hdr tela="login" perfil={null} {...hdr} onAjuda={()=>{}}/>
+  if(tela === "login" || tela === "criarSenha" || tela === "esqueciSenha") return <>
+    <Hdr tela={tela} perfil={null} {...hdr} onAjuda={()=>{}}/>
     <div style={{minHeight:"calc(100vh - 56px)",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--bg2)",padding:"1rem"}}>
       <div style={{background:"var(--bg)",borderRadius:20,padding:"2rem",width:"100%",maxWidth:380,border:"1px solid var(--border)",boxShadow:"0 4px 32px rgba(0,0,0,0.1)"}}>
         <div style={{textAlign:"center",marginBottom:24}}>
           <img src={LOGO} alt="Logo" style={{height:44,objectFit:"contain",marginBottom:10}} onError={e=>e.target.style.display="none"}/>
-          <p style={{fontSize:13,color:"var(--text2)"}}>{tela==="criarSenha"?"Crie sua senha de acesso":"Sistema de Reembolso"}</p>
+          <p style={{fontSize:13,color:"var(--text2)"}}>
+            {tela==="criarSenha" ? "Crie seu PIN de 6 números" : (tela==="esqueciSenha" ? "Recuperação de Acesso" : "Sistema de Reembolso")}
+          </p>
         </div>
+
         {tela === "login" && <>
           <label style={L}>E-mail</label>
-          <input style={{...I(false),marginBottom:14}} value={emailL} onChange={e=>setEmailL(e.target.value)} placeholder="seu@email.com" type="email" autoComplete="email"/>
-          <label style={L}>Senha</label>
+          <input 
+            style={{...I(false),marginBottom:14}} 
+            value={emailL} 
+            onChange={e=>setEmailL(e.target.value)} 
+            placeholder="seu@email.com" 
+            type="email" 
+            autoComplete="email"
+          />
+          
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+            <label style={{...L,marginBottom:0}}>Senha (6 números)</label>
+            <button 
+              type="button" 
+              onClick={()=>{ setMsg(null); setEtapaEsqueci(1); setTela("esqueciSenha"); }} 
+              style={{background:"none",border:"none",color:"var(--primary)",fontSize:12,cursor:"pointer",fontWeight:500,padding:0}}
+            >
+              Esqueci a senha
+            </button>
+          </div>
           <div style={{position:"relative",marginBottom:16}}>
-            <input style={{...I(false),paddingRight:44}} value={senha} onChange={e=>setSenha(e.target.value)} placeholder="••••••" type={showPwd?"text":"password"} onKeyDown={e=>e.key==="Enter"&&login()} autoComplete="current-password"/>
-            <button type="button" onClick={()=>setShowPwd(v=>!v)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:12,color:"var(--text2)"}}>{showPwd?"ocultar":"ver"}</button>
+            <input 
+              style={{...I(false),paddingRight:44,letterSpacing:senha?"4px":"normal",fontWeight:senha?"600":"normal"}} 
+              value={senha} 
+              onChange={e=>setSenha(e.target.value.replace(/\D/g,"").slice(0,6))} 
+              placeholder="000000" 
+              type={showPwd?"text":"password"} 
+              inputMode="numeric" 
+              pattern="[0-9]*" 
+              maxLength={6} 
+              onKeyDown={e=>e.key==="Enter"&&login()} 
+              autoComplete="current-password"
+            />
+            <button 
+              type="button" 
+              onClick={()=>setShowPwd(v=>!v)} 
+              style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:12,color:"var(--text2)"}}
+            >
+              {showPwd?"ocultar":"ver"}
+            </button>
           </div>
           <Alerta msg={msg}/>
-          <button style={{width:"100%",padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}} onClick={login} disabled={load}>{load?"Entrando...":"Entrar"}</button>
-          <p style={{fontSize:11,color:"var(--text3)",marginTop:14,textAlign:"center"}}>No primeiro acesso você criará sua senha</p>
+          <button 
+            style={{width:"100%",padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}} 
+            onClick={login} 
+            disabled={load}
+          >
+            {load?"Entrando...":"Entrar"}
+          </button>
+          <p style={{fontSize:12,color:"var(--text3)",marginTop:14,textAlign:"center",lineHeight:1.4}}>
+            🔒 Acesso via PIN de 6 dígitos numéricos.<br/>No primeiro acesso você definirá sua senha.
+          </p>
         </>}
+
         {tela === "criarSenha" && <>
           <div style={{background:"var(--abg)",border:"1px solid var(--abr)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:"var(--atx)"}}>
-            Primeiro acesso! Crie uma senha com pelo menos 6 caracteres.
+            ✨ <strong>Primeiro acesso!</strong> Crie um PIN de acesso de <strong>6 números</strong> (ex: 123456).
           </div>
-          <label style={L}>Nova senha</label>
-          <input style={{...I(false),marginBottom:14}} value={novaSenha} onChange={e=>setNovaSenha(e.target.value)} placeholder="Mínimo 6 caracteres" type="password" autoComplete="new-password"/>
-          <label style={L}>Confirmar senha</label>
-          <input style={{...I(false),marginBottom:16}} value={confSenha} onChange={e=>setConfSenha(e.target.value)} placeholder="Repita a senha" type="password" onKeyDown={e=>e.key==="Enter"&&criarSenha()} autoComplete="new-password"/>
+          <label style={L}>Novo PIN numérico (6 dígitos)</label>
+          <input 
+            style={{...I(false),marginBottom:14,letterSpacing:novaSenha?"4px":"normal",fontWeight:novaSenha?"600":"normal"}} 
+            value={novaSenha} 
+            onChange={e=>setNovaSenha(e.target.value.replace(/\D/g,"").slice(0,6))} 
+            placeholder="000000" 
+            type="password" 
+            inputMode="numeric" 
+            pattern="[0-9]*" 
+            maxLength={6} 
+            autoComplete="new-password"
+          />
+          <label style={L}>Confirmar novo PIN</label>
+          <input 
+            style={{...I(false),marginBottom:16,letterSpacing:confSenha?"4px":"normal",fontWeight:confSenha?"600":"normal"}} 
+            value={confSenha} 
+            onChange={e=>setConfSenha(e.target.value.replace(/\D/g,"").slice(0,6))} 
+            placeholder="Repita os 6 números" 
+            type="password" 
+            inputMode="numeric" 
+            pattern="[0-9]*" 
+            maxLength={6} 
+            onKeyDown={e=>e.key==="Enter"&&criarSenha()} 
+            autoComplete="new-password"
+          />
           <Alerta msg={msg}/>
-          <button style={{width:"100%",padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}} onClick={criarSenha} disabled={load}>{load?"Salvando...":"Criar senha e entrar"}</button>
+          <button 
+            style={{width:"100%",padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}} 
+            onClick={criarSenha} 
+            disabled={load}
+          >
+            {load?"Salvando...":"Criar senha e entrar"}
+          </button>
+          <button 
+            type="button" 
+            onClick={()=>{ setMsg(null); setTela("login"); }} 
+            style={{width:"100%",background:"none",border:"none",color:"var(--text2)",fontSize:13,marginTop:12,cursor:"pointer"}}
+          >
+            ← Voltar ao login
+          </button>
+        </>}
+
+        {tela === "esqueciSenha" && <>
+          {etapaEsqueci === 1 ? <>
+            <div style={{background:"var(--bbg)",border:"1px solid var(--bbr)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:"var(--btx)"}}>
+              🔑 <strong>Esqueceu sua senha?</strong><br/>
+              Digite seu e-mail cadastrado. Enviaremos um <strong>código de 6 dígitos</strong> para você redefinir seu PIN.
+            </div>
+            <label style={L}>E-mail cadastrado</label>
+            <input 
+              style={{...I(false),marginBottom:16}} 
+              value={emailL} 
+              onChange={e=>setEmailL(e.target.value)} 
+              placeholder="seu@email.com" 
+              type="email" 
+              autoComplete="email" 
+              onKeyDown={e=>e.key==="Enter"&&solicitarCodigoReset()}
+            />
+            <Alerta msg={msg}/>
+            <button 
+              style={{width:"100%",padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}} 
+              onClick={solicitarCodigoReset} 
+              disabled={load}
+            >
+              {load?"Enviando código...":"📨 Enviar código de recuperação"}
+            </button>
+            <button 
+              type="button" 
+              onClick={()=>{ setMsg(null); setTela("login"); }} 
+              style={{width:"100%",background:"none",border:"none",color:"var(--text2)",fontSize:13,marginTop:14,cursor:"pointer"}}
+            >
+              ← Voltar ao login
+            </button>
+          </> : <>
+            <div style={{background:"var(--gbg)",border:"1px solid var(--gbr)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,color:"var(--gtx)"}}>
+              ✉️ Código enviado para <strong>{emailL}</strong>!<br/>
+              Consulte seu e-mail (inclusive caixa de spam) e digite o código de 6 números abaixo.
+            </div>
+            <label style={L}>Código de verificação (6 dígitos)</label>
+            <input 
+              style={{...I(false),marginBottom:14,textAlign:"center",letterSpacing:"6px",fontSize:18,fontWeight:700}} 
+              value={codigoReset} 
+              onChange={e=>setCodigoReset(e.target.value.replace(/\D/g,"").slice(0,6))} 
+              placeholder="000000" 
+              type="text" 
+              inputMode="numeric" 
+              pattern="[0-9]*" 
+              maxLength={6} 
+              autoFocus
+            />
+            
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+              <label style={{...L,marginBottom:0}}>Nova senha (6 números)</label>
+              <button 
+                type="button" 
+                onClick={()=>setShowPwdReset(v=>!v)} 
+                style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"var(--text2)"}}
+              >
+                {showPwdReset?"ocultar":"ver"}
+              </button>
+            </div>
+            <input 
+              style={{...I(false),marginBottom:14,letterSpacing:novaSenhaReset?"4px":"normal",fontWeight:novaSenhaReset?"600":"normal"}} 
+              value={novaSenhaReset} 
+              onChange={e=>setNovaSenhaReset(e.target.value.replace(/\D/g,"").slice(0,6))} 
+              placeholder="6 números (ex: 123456)" 
+              type={showPwdReset?"text":"password"} 
+              inputMode="numeric" 
+              pattern="[0-9]*" 
+              maxLength={6} 
+              autoComplete="new-password"
+            />
+            
+            <label style={L}>Confirmar nova senha (6 números)</label>
+            <input 
+              style={{...I(false),marginBottom:16,letterSpacing:confSenhaReset?"4px":"normal",fontWeight:confSenhaReset?"600":"normal"}} 
+              value={confSenhaReset} 
+              onChange={e=>setConfSenhaReset(e.target.value.replace(/\D/g,"").slice(0,6))} 
+              placeholder="Repita os 6 números" 
+              type={showPwdReset?"text":"password"} 
+              inputMode="numeric" 
+              pattern="[0-9]*" 
+              maxLength={6} 
+              onKeyDown={e=>e.key==="Enter"&&redefinirSenha()} 
+              autoComplete="new-password"
+            />
+            
+            <Alerta msg={msg}/>
+            <button 
+              style={{width:"100%",padding:13,fontSize:15,fontWeight:600,border:"none",borderRadius:10,background:"var(--primary)",color:"#fff",cursor:"pointer"}} 
+              onClick={redefinirSenha} 
+              disabled={load}
+            >
+              {load?"Redefinindo...":"✓ Redefinir senha e entrar"}
+            </button>
+            <div style={{display:"flex",justifyContent:"center",alignItems:"center",marginTop:14}}>
+              <button 
+                type="button" 
+                onClick={solicitarCodigoReset} 
+                disabled={load} 
+                style={{background:"none",border:"none",color:"var(--primary)",fontSize:13,cursor:"pointer",padding:0,fontWeight:500}}
+              >
+                🔄 Reenviar código
+              </button>
+            </div>
+            <button 
+              type="button" 
+              onClick={()=>{ setMsg(null); setTela("login"); }} 
+              style={{width:"100%",background:"none",border:"none",color:"var(--text2)",fontSize:13,marginTop:12,cursor:"pointer"}}
+            >
+              ← Voltar ao login
+            </button>
+          </>}
         </>}
       </div>
     </div>
