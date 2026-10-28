@@ -822,6 +822,7 @@ function App(){
 
   // Estado para Lightbox / Zoom da Foto
   const [modalImg, setModalImg] = useState(null);
+  const [gerandoPdf, setGerandoPdf] = useState(null);
 
   useEffect(() => {
     document.body.className = dark ? "dark" : "light";
@@ -2006,6 +2007,45 @@ function App(){
           {sv.Comentario_RH && <div className="card" style={{borderLeft:"3px solid var(--gbr)",borderRadius:"0 14px 14px 0"}}>
             <p style={{fontSize:12,color:"var(--text2)",fontWeight:500}}>Comentário Diretor Geral</p>
             <p style={{fontSize:13,marginTop:4,color:"var(--text)"}}>{sv.Comentario_RH}</p>
+          </div>}
+
+          {/* COMPROVANTE OFICIAL EM PDF */}
+          {(sv.Status === "Aprovado Diretor Geral" || sv.Comprovante_PDF) && <div className="card" style={{borderLeft:"4px solid #10b981",background:"var(--card)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+              <div>
+                <p style={{fontWeight:700,fontSize:14,color:"var(--text)",display:"flex",alignItems:"center",gap:6}}>
+                  <span>📄</span> Comprovante Oficial de Aprovação
+                </p>
+                <p style={{fontSize:12,color:"var(--text2)",marginTop:2}}>
+                  Relatório com assinaturas digitais, dados bancários/Pix e resumo das notas para pagamento e auditoria.
+                </p>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {sv.Comprovante_PDF ? (
+                  <a href={sv.Comprovante_PDF} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,padding:"10px 16px",borderRadius:8,background:"#059669",color:"#fff",textDecoration:"none",fontWeight:600}}>
+                    📥 Baixar Comprovante (PDF)
+                  </a>
+                ) : (
+                  <button type="button" onClick={async () => {
+                    setGerandoPdf(sv.ID_Solicitacao);
+                    try {
+                      const res = await apiCall({ type: "gerarPdf", id: sv.ID_Solicitacao });
+                      if(res && res.ok && res.pdfUrl) {
+                        window.open(res.pdfUrl, "_blank");
+                        await carregar(usuario, perfil);
+                      } else {
+                        alert("Erro ao gerar PDF: " + (res && res.msg ? res.msg : "Tente novamente."));
+                      }
+                    } catch(err) {
+                      alert("Erro na conexão: " + err.message);
+                    }
+                    setGerandoPdf(null);
+                  }} disabled={gerandoPdf === sv.ID_Solicitacao} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,padding:"10px 16px",borderRadius:8,background:"#059669",color:"#fff",border:"none",cursor:"pointer",fontWeight:600}}>
+                    {gerandoPdf === sv.ID_Solicitacao ? "⏳ Gerando PDF..." : "📄 Gerar Comprovante (PDF)"}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>}
 
           {/* AÇÕES DE GESTÃO (Financeiro / Diretor) */}
