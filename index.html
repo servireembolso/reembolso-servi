@@ -78,13 +78,21 @@ const nForm=()=>({nome:"",dep:"",de:"",ate:"",pix:"",banco:"",desc:"",notas:[nNF
 // Conversores e formatadores de moeda seguros
 const parseMoeda = val => {
   if(val === undefined || val === null || val === "") return 0;
-  if(typeof val === "number") return val;
-  const s = val.toString().trim();
-  if(s.includes(",")) {
-    const limpo = s.replace(/\./g, "").replace(",", ".");
-    return parseFloat(limpo) || 0;
+  if(typeof val === "number") return isNaN(val) ? 0 : val;
+  let s = val.toString().trim().replace(/^R\$\s*/i, "").trim();
+  if(!s) return 0;
+  if(s.includes(",") && s.includes(".")) {
+    if(s.lastIndexOf(",") > s.lastIndexOf(".")) {
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      s = s.replace(/,/g, "");
+    }
+  } else if(s.includes(",")) {
+    s = s.replace(",", ".");
   }
-  return parseFloat(s) || 0;
+  s = s.replace(/[^\d.-]/g, "");
+  const num = parseFloat(s);
+  return isNaN(num) ? 0 : num;
 };
 
 const fmtMoeda = val => {
